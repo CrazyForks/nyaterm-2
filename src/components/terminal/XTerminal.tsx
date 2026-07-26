@@ -1734,6 +1734,32 @@ export default function XTerminal({
       }
     };
 
+    const refreshCommandLineTimestamp = () => {
+      if (!terminalAppSettingsRef.current?.terminal?.show_timestamps) return;
+      if (terminal.buffer.active.type === "alternate") return;
+
+      const buf = terminal.buffer.active;
+      const offset = gutterLineOffsetRef.current;
+      const cursorLine = buf.baseY + buf.cursorY;
+      const ts = Date.now();
+      const map = lineTimestampsRef.current;
+
+      let startLine = cursorLine;
+      while (startLine > 0) {
+        const line = buf.getLine(startLine);
+        if (line && !line.isWrapped) break;
+        startLine -= 1;
+      }
+
+      for (let y = startLine; y <= cursorLine; y += 1) {
+        map.set(offset + y, ts);
+      }
+
+      if (performanceModeRef.current === "normal") {
+        refreshGutter();
+      }
+    };
+
     const outputAckBatchBytes = 64 * 1024;
     const outputAckDebounceMs = 16;
 
@@ -2629,6 +2655,9 @@ export default function XTerminal({
       }
 
       const command = data === "\r" ? getTrackedSubmissionCommand(inputStateRef.current) : "";
+      if (data === "\r") {
+        refreshCommandLineTimestamp();
+      }
       inputStateRef.current = applyTerminalInputData(inputStateRef.current, data);
       if (data === "\r" || data === "\u0003") {
         clearCredentialPromptInputMode();
