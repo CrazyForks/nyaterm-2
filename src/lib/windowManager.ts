@@ -7,6 +7,7 @@ import {
 } from "@tauri-apps/api/window";
 import i18n from "../i18n";
 import { invoke } from "./invoke";
+import { logger } from "./logger";
 import { isMacOS } from "./platform";
 
 type ChildWindowStateKey =
@@ -39,8 +40,9 @@ const MODAL_GROUP_RAISE_SUPPRESS_MS = 250;
 const MODAL_TOPMOST_PULSE_MS = 120;
 const CHILD_WINDOW_READY_EVENT = "child-window-ready";
 const CHILD_WINDOW_READY_TIMEOUT_MS = 5_000;
+const INIT_URL_ONLY_WINDOW_TYPES = new Set(["new-session", "quick-command"]);
 const registeredDestroyedHandlers = new Set<string>();
-const pendingChildWindowOpens = new Map<string, Promise<WebviewWindow>>();
+const pendingChildWindowOpens = new Map<string, PendingChildWindowOpen>();
 let ownerMainWindowLabel = MAIN_WINDOW_LABEL;
 let modalGroupRaiseInFlight = false;
 let suppressChildFocusSyncUntil = 0;
@@ -62,6 +64,11 @@ interface ChildWindowReadyPayload {
 interface ChildWindowReadyWaiter {
   promise: Promise<void>;
   cancel: () => void;
+}
+
+interface PendingChildWindowOpen {
+  url: string;
+  promise: Promise<WebviewWindow>;
 }
 
 export function isMainWindowLabel(label: string) {
@@ -135,6 +142,28 @@ function needsAlwaysOnTop(label: string) {
 
 function childWindowKind(opts: ChildWindowOptions) {
   return opts.kind ?? "modal";
+}
+
+function childWindowTypeFromUrl(url: string) {
+  try {
+    const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+    return new URLSearchParams(query).get("window") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function shouldWarnPendingOpenConflict(existingUrl: string, requestedUrl: string) {
+  const existingWindowType = childWindowTypeFromUrl(existingUrl);
+  const requestedWindowType = childWindowTypeFromUrl(requestedUrl);
+  return {
+    existingWindowType,
+    requestedWindowType,
+    shouldWarn:
+      existingWindowType === requestedWindowType &&
+      existingWindowType !== undefined &&
+      INIT_URL_ONLY_WINDOW_TYPES.has(existingWindowType),
+  };
 }
 
 async function getMainWindow() {
@@ -315,8 +344,23 @@ async function createChildWindowReadyWaiter(label: string): Promise<ChildWindowR
         settle();
       }
     });
-    timeoutId = window.setTimeout(settle, CHILD_WINDOW_READY_TIMEOUT_MS);
-  } catch {
+    timeoutId = window.setTimeout(() => {
+      logger.warn({
+        domain: "window.lifecycle",
+        event: "child_ready_timeout",
+        message: "Child window did not signal ready before timeout",
+        data: { label },
+      });
+      settle();
+    }, CHILD_WINDOW_READY_TIMEOUT_MS);
+  } catch (error) {
+    logger.warn({
+      domain: "window.lifecycle",
+      event: "child_ready_listener_failed",
+      message: "Failed to listen for child window ready event",
+      data: { label },
+      error,
+    });
     settle();
   }
 
@@ -378,13 +422,31 @@ async function openChildWindowInternal(opts: ChildWindowOptions) {
 export function openChildWindow(opts: ChildWindowOptions): Promise<WebviewWindow> {
   const pending = pendingChildWindowOpens.get(opts.label);
   if (pending) {
-    return pending.then((win) => revealChildWindow(win, opts, childWindowKind(opts) === "modal"));
+    if (pending.url !== opts.url) {
+      const { existingWindowType, requestedWindowType, shouldWarn } = shouldWarnPendingOpenConflict(
+        pending.url,
+        opts.url,
+      );
+      if (shouldWarn) {
+        logger.warn({
+          domain: "window.lifecycle",
+          event: "child_window_open_conflict",
+          message: "Ignored child window open request while the same label is already opening",
+          data: {
+            label: opts.label,
+            existingWindowType,
+            requestedWindowType,
+          },
+        });
+      }
+    }
+    return pending.promise;
   }
 
   const operation = openChildWindowInternal(opts);
-  pendingChildWindowOpens.set(opts.label, operation);
+  pendingChildWindowOpens.set(opts.label, { url: opts.url, promise: operation });
   const clearPending = () => {
-    if (pendingChildWindowOpens.get(opts.label) === operation) {
+    if (pendingChildWindowOpens.get(opts.label)?.promise === operation) {
       pendingChildWindowOpens.delete(opts.label);
     }
   };
