@@ -1212,6 +1212,9 @@ export default function XTerminal({
       }
 
       applySuggestion(selected.command, execute);
+      if (execute) {
+        refreshCommandLineTimestamp();
+      }
       dismissSuggestions();
       return true;
     };
