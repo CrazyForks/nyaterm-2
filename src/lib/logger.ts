@@ -8,6 +8,7 @@ type LogDomain =
   | "ui.action"
   | "ui.error"
   | "tauri.invoke"
+  | "window.lifecycle"
   | "settings.persistence"
   | "terminal.input"
   | "session.lifecycle"

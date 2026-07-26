@@ -1,4 +1,4 @@
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   getCurrentWindow,
@@ -7,6 +7,7 @@ import {
 } from "@tauri-apps/api/window";
 import i18n from "../i18n";
 import { invoke } from "./invoke";
+import { logger } from "./logger";
 import { isMacOS } from "./platform";
 
 type ChildWindowStateKey =
@@ -37,7 +38,11 @@ const AUTO_UPLOAD_OWNER_SEPARATOR = "--";
 const MODAL_CHILD_BASE_LABELS = new Set(["settings", "new-session", "quick-command"]);
 const MODAL_GROUP_RAISE_SUPPRESS_MS = 250;
 const MODAL_TOPMOST_PULSE_MS = 120;
+const CHILD_WINDOW_READY_EVENT = "child-window-ready";
+const CHILD_WINDOW_READY_TIMEOUT_MS = 5_000;
+const INIT_URL_ONLY_WINDOW_TYPES = new Set(["new-session", "quick-command"]);
 const registeredDestroyedHandlers = new Set<string>();
+const pendingChildWindowOpens = new Map<string, PendingChildWindowOpen>();
 let ownerMainWindowLabel = MAIN_WINDOW_LABEL;
 let modalGroupRaiseInFlight = false;
 let suppressChildFocusSyncUntil = 0;
@@ -50,6 +55,20 @@ interface ModalGroupRaiseOptions {
   excludedLabel?: string;
   requestAttention?: boolean;
   reason?: ModalGroupRaiseReason;
+}
+
+interface ChildWindowReadyPayload {
+  label: string;
+}
+
+interface ChildWindowReadyWaiter {
+  promise: Promise<void>;
+  cancel: () => void;
+}
+
+interface PendingChildWindowOpen {
+  url: string;
+  promise: Promise<WebviewWindow>;
 }
 
 export function isMainWindowLabel(label: string) {
@@ -68,6 +87,10 @@ export function getOwnerMainWindowLabel() {
 
 export function isPrimaryMainWindow() {
   return ownerMainWindowLabel === MAIN_WINDOW_LABEL;
+}
+
+export function signalChildWindowReady() {
+  return emit(CHILD_WINDOW_READY_EVENT, { label: getCurrentWindow().label });
 }
 
 function scopedModalLabel(baseLabel: string, ownerLabel = ownerMainWindowLabel) {
@@ -119,6 +142,28 @@ function needsAlwaysOnTop(label: string) {
 
 function childWindowKind(opts: ChildWindowOptions) {
   return opts.kind ?? "modal";
+}
+
+function childWindowTypeFromUrl(url: string) {
+  try {
+    const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+    return new URLSearchParams(query).get("window") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function shouldWarnPendingOpenConflict(existingUrl: string, requestedUrl: string) {
+  const existingWindowType = childWindowTypeFromUrl(existingUrl);
+  const requestedWindowType = childWindowTypeFromUrl(requestedUrl);
+  return {
+    existingWindowType,
+    requestedWindowType,
+    shouldWarn:
+      existingWindowType === requestedWindowType &&
+      existingWindowType !== undefined &&
+      INIT_URL_ONLY_WINDOW_TYPES.has(existingWindowType),
+  };
 }
 
 async function getMainWindow() {
@@ -274,42 +319,56 @@ export async function bounceTopModalWindow() {
   await raiseModalChildWindowGroup({ requestAttention: true, reason: "backdrop" });
 }
 
-export async function openChildWindow(opts: ChildWindowOptions) {
-  const kind = childWindowKind(opts);
-  const isModal = kind === "modal";
-  const existing = await WebviewWindow.getByLabel(opts.label);
-  if (existing) {
-    await existing.setTitle(opts.title).catch(() => {});
-    await existing.setAlwaysOnTop(needsAlwaysOnTop(opts.label)).catch(() => {});
-    await existing.show().catch(() => {});
-    await existing.setFocus().catch(() => {});
-    emit("child-window-opened", { label: opts.label });
-    if (isModal) {
-      await syncMainWindowModalState().catch(() => {});
-    }
-    return existing;
-  }
-
-  await invoke("open_child_window", {
-    options: {
-      label: opts.label,
-      title: opts.title,
-      url: opts.url,
-      kind,
-      parentLabel: opts.parentLabel ?? ownerMainWindowLabel,
-      width: opts.width ?? 720,
-      height: opts.height ?? 560,
-      resizable: opts.resizable ?? true,
-      alwaysOnTop: needsAlwaysOnTop(opts.label),
-      stateKey: opts.stateKey,
-    },
+async function createChildWindowReadyWaiter(label: string): Promise<ChildWindowReadyWaiter> {
+  let settled = false;
+  let timeoutId: number | undefined;
+  let unlisten: (() => void) | undefined;
+  let resolveReady: () => void = () => {};
+  const promise = new Promise<void>((resolve) => {
+    resolveReady = resolve;
   });
 
-  const win = await WebviewWindow.getByLabel(opts.label);
-  if (!win) {
-    throw new Error(`Failed to create child window: ${opts.label}`);
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+    unlisten?.();
+    resolveReady();
+  };
+
+  try {
+    unlisten = await listen<ChildWindowReadyPayload>(CHILD_WINDOW_READY_EVENT, ({ payload }) => {
+      if (payload.label === label) {
+        settle();
+      }
+    });
+    timeoutId = window.setTimeout(() => {
+      logger.warn({
+        domain: "window.lifecycle",
+        event: "child_ready_timeout",
+        message: "Child window did not signal ready before timeout",
+        data: { label },
+      });
+      settle();
+    }, CHILD_WINDOW_READY_TIMEOUT_MS);
+  } catch (error) {
+    logger.warn({
+      domain: "window.lifecycle",
+      event: "child_ready_listener_failed",
+      message: "Failed to listen for child window ready event",
+      data: { label },
+      error,
+    });
+    settle();
   }
 
+  return { promise, cancel: settle };
+}
+
+async function revealChildWindow(win: WebviewWindow, opts: ChildWindowOptions, isModal: boolean) {
+  await win.setTitle(opts.title).catch(() => {});
   await win.setAlwaysOnTop(needsAlwaysOnTop(opts.label)).catch(() => {});
   attachChildWindowDestroyedHandler(opts.label, win);
   await win.show().catch(() => {});
@@ -319,6 +378,80 @@ export async function openChildWindow(opts: ChildWindowOptions) {
     await syncMainWindowModalState().catch(() => {});
   }
   return win;
+}
+
+async function openChildWindowInternal(opts: ChildWindowOptions) {
+  const kind = childWindowKind(opts);
+  const isModal = kind === "modal";
+  const existing = await WebviewWindow.getByLabel(opts.label);
+  if (existing) {
+    return revealChildWindow(existing, opts, isModal);
+  }
+
+  const readyWaiter = await createChildWindowReadyWaiter(opts.label);
+  try {
+    await invoke("open_child_window", {
+      options: {
+        label: opts.label,
+        title: opts.title,
+        url: opts.url,
+        kind,
+        parentLabel: opts.parentLabel ?? ownerMainWindowLabel,
+        width: opts.width ?? 720,
+        height: opts.height ?? 560,
+        resizable: opts.resizable ?? true,
+        alwaysOnTop: needsAlwaysOnTop(opts.label),
+        stateKey: opts.stateKey,
+      },
+    });
+
+    const win = await WebviewWindow.getByLabel(opts.label);
+    if (!win) {
+      throw new Error(`Failed to create child window: ${opts.label}`);
+    }
+
+    attachChildWindowDestroyedHandler(opts.label, win);
+    await readyWaiter.promise;
+    return revealChildWindow(win, opts, isModal);
+  } catch (error) {
+    readyWaiter.cancel();
+    throw error;
+  }
+}
+
+export function openChildWindow(opts: ChildWindowOptions): Promise<WebviewWindow> {
+  const pending = pendingChildWindowOpens.get(opts.label);
+  if (pending) {
+    if (pending.url !== opts.url) {
+      const { existingWindowType, requestedWindowType, shouldWarn } = shouldWarnPendingOpenConflict(
+        pending.url,
+        opts.url,
+      );
+      if (shouldWarn) {
+        logger.warn({
+          domain: "window.lifecycle",
+          event: "child_window_open_conflict",
+          message: "Ignored child window open request while the same label is already opening",
+          data: {
+            label: opts.label,
+            existingWindowType,
+            requestedWindowType,
+          },
+        });
+      }
+    }
+    return pending.promise;
+  }
+
+  const operation = openChildWindowInternal(opts);
+  pendingChildWindowOpens.set(opts.label, { url: opts.url, promise: operation });
+  const clearPending = () => {
+    if (pendingChildWindowOpens.get(opts.label)?.promise === operation) {
+      pendingChildWindowOpens.delete(opts.label);
+    }
+  };
+  operation.then(clearPending, clearPending);
+  return operation;
 }
 
 export async function openSettings(tab?: string) {
