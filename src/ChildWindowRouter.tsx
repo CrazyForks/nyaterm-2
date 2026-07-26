@@ -1,11 +1,12 @@
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, type ReactNode, Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   isModalChildLabel,
   prepareForModalChildClose,
   setOwnerMainWindowLabel,
+  signalChildWindowReady,
 } from "./lib/windowManager";
 
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
@@ -24,6 +25,18 @@ const PAGES: Record<string, React.ComponentType> = {
   "file-preview": FilePreviewPage,
 };
 
+function ReadyContent({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void signalChildWindowReady();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  return children;
+}
+
 export default function ChildWindowRouter({ windowType }: { windowType: string }) {
   const { t } = useTranslation();
   const Page = PAGES[windowType];
@@ -39,8 +52,6 @@ export default function ChildWindowRouter({ windowType }: { windowType: string }
     let programmaticClose = false;
     let lastFocusEmitAt = 0;
     const pageHandlesCloseRequested = windowType === "settings";
-
-    currentWindow.show().catch(() => {});
 
     if (!pageHandlesCloseRequested) {
       currentWindow
@@ -86,21 +97,19 @@ export default function ChildWindowRouter({ windowType }: { windowType: string }
 
   if (!Page) {
     return (
-      <div className="h-screen flex items-center justify-center text-muted-foreground">
-        {t("common.unknownWindowType")}: {windowType}
-      </div>
+      <ReadyContent>
+        <div className="h-screen flex items-center justify-center text-muted-foreground">
+          {t("common.unknownWindowType")}: {windowType}
+        </div>
+      </ReadyContent>
     );
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="h-screen flex items-center justify-center text-muted-foreground">
-          {t("common.loading")}
-        </div>
-      }
-    >
-      <Page />
+    <Suspense fallback={null}>
+      <ReadyContent>
+        <Page />
+      </ReadyContent>
     </Suspense>
   );
 }
