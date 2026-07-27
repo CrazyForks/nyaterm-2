@@ -112,6 +112,7 @@ export default function NewSessionPage() {
   const [passwordId, setPasswordId] = useState("");
   const [password, setPassword] = useState("");
   const [hasPassword, setHasPassword] = useState(false);
+  const [passwordSecretsUnlocked, setPasswordSecretsUnlocked] = useState(false);
   const [keyId, setKeyId] = useState("");
   const [iconKey, setIconKey] = useState("");
   const [iconAutoDetect, setIconAutoDetect] = useState(true);
@@ -1060,6 +1061,9 @@ export default function NewSessionPage() {
               connectionId={initialData?.id || editId}
               encoding={encoding}
               setEncoding={setEncoding}
+              passwordSecretsUnlocked={passwordSecretsUnlocked}
+              onUnlockPasswordSecrets={() => setPasswordSecretsUnlocked(true)}
+              onLockPasswordSecrets={() => setPasswordSecretsUnlocked(false)}
             />
           </TabsContent>
 
@@ -1111,6 +1115,9 @@ export default function NewSessionPage() {
               connectionId={initialData?.id || editId}
               encoding={encoding}
               setEncoding={setEncoding}
+              passwordSecretsUnlocked={passwordSecretsUnlocked}
+              onUnlockPasswordSecrets={() => setPasswordSecretsUnlocked(true)}
+              onLockPasswordSecrets={() => setPasswordSecretsUnlocked(false)}
             />
           </TabsContent>
 

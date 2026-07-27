@@ -111,6 +111,9 @@ interface SshFormProps {
   connectionId?: string;
   encoding: string;
   setEncoding: (v: string) => void;
+  passwordSecretsUnlocked?: boolean;
+  onUnlockPasswordSecrets?: () => void;
+  onLockPasswordSecrets?: () => void;
 }
 
 function RequiredMark() {
@@ -430,6 +433,9 @@ export function SshForm({
   connectionId,
   encoding,
   setEncoding,
+  passwordSecretsUnlocked = false,
+  onUnlockPasswordSecrets,
+  onLockPasswordSecrets,
 }: SshFormProps) {
   const { t } = useTranslation();
   const [sshKeys, setSshKeys] = useState<SshKey[]>([]);
@@ -1369,15 +1375,19 @@ export function SshForm({
         }}
       >
         <DialogContent
-          className="w-[min(27rem,calc(100vw-3rem))] max-w-none max-h-[76vh] overflow-hidden"
+          className="!flex w-[min(27rem,calc(100vw-3rem))] max-w-none !max-h-[76vh] min-h-0 flex-col !overflow-hidden"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0">
             <DialogTitle>{t("passwordManager.title")}</DialogTitle>
             <DialogDescription className="sr-only">{t("passwordManager.title")}</DialogDescription>
           </DialogHeader>
-          <div className="overflow-y-auto px-1 pb-1">
-            <PasswordManagementTab />
+          <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-1 terminal-scroll">
+            <PasswordManagementTab
+              secretsUnlocked={passwordSecretsUnlocked}
+              onUnlockSecrets={onUnlockPasswordSecrets}
+              onLockSecrets={onLockPasswordSecrets}
+            />
           </div>
         </DialogContent>
       </Dialog>
