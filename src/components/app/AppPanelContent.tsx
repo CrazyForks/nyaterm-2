@@ -87,6 +87,7 @@ export default function AppPanelContent({
                 activeSessionId={activeSessionId}
                 activeSessionType={liveActivePane ? liveActivePane.type : null}
                 activeConnectionId={liveActivePane?.connectionId ?? null}
+                activeSessionName={liveActivePane?.name ?? null}
               />
             </div>
             <ResizeHandle direction="vertical" onResize={onTransferResize} />

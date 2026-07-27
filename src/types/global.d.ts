@@ -1347,6 +1347,7 @@ export interface FileExplorerProps {
   activeSessionId: string | null;
   activeSessionType: SessionType | null;
   activeConnectionId?: string | null;
+  activeSessionName?: string | null;
 }
 
 export interface WebdavSyncSettings {

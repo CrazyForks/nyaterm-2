@@ -74,11 +74,13 @@ import { logger } from "@/lib/logger";
 import { sendSessionInput } from "@/lib/sessionInput";
 import { matchesKeyEvent } from "@/lib/shortcutRegistry";
 import { cn, formatSize } from "@/lib/utils";
+import type { FileWindowTarget } from "@/lib/windowManager";
 import { openAutoUpload, openFilePreview, openRemoteFileEditor } from "@/lib/windowManager";
 import type {
   AICustomActionConfig,
   FileEntry,
   FileExplorerProps,
+  SavedConnection,
   SessionInfo,
 } from "@/types/global";
 import { FileExplorerDialogs } from "./FileExplorerDialogs";
@@ -170,6 +172,49 @@ function isFileBrowsableSession(session: SessionInfo) {
 
 function getSessionExplorerKind(session: SessionInfo): FileExplorerBackendKind {
   return session.session_type === "Local" ? "local" : "remote";
+}
+
+function formatConnectionTargetDetail(connection: SavedConnection) {
+  if (connection.type === "ssh" && connection.host) {
+    const hostWithPort = connection.port
+      ? `${connection.host}:${connection.port}`
+      : connection.host;
+    return connection.username ? `${connection.username}@${hostWithPort}` : hostWithPort;
+  }
+  if (connection.type === "local_terminal") {
+    return connection.working_dir || connection.shell_path || undefined;
+  }
+  return undefined;
+}
+
+function buildFileWindowTarget({
+  backend,
+  connection,
+  sessionName,
+  remoteLabel,
+}: {
+  backend: FileExplorerBackendKind;
+  connection?: SavedConnection | null;
+  sessionName?: string | null;
+  remoteLabel: string;
+}): FileWindowTarget | undefined {
+  const fallbackLabel = sessionName?.trim() || connection?.name?.trim() || "";
+  if (backend === "local") {
+    return undefined;
+  }
+
+  if (connection?.name?.trim()) {
+    return {
+      kind: "remote",
+      label: connection.name,
+      detail: formatConnectionTargetDetail(connection) || fallbackLabel || undefined,
+    };
+  }
+
+  return {
+    kind: "remote",
+    label: fallbackLabel || remoteLabel,
+  };
 }
 
 /** Dual-pane file browser wrapper. */
@@ -501,6 +546,7 @@ function FileExplorer(props: FileExplorerProps) {
               activeSessionId={selectedTarget.id}
               activeSessionType={selectedTarget.session_type}
               activeConnectionId={null}
+              activeSessionName={selectedTarget.name}
               headerMeta={`${selectedTarget.name} · ${
                 selectedTarget.connected
                   ? t("fileExplorer.connected")
@@ -528,6 +574,7 @@ function FileExplorer(props: FileExplorerProps) {
     <div ref={containerRef} className="relative h-full min-h-0">
       <FileExplorerPane
         {...props}
+        activeSessionName={props.activeSessionName ?? currentSession?.name ?? null}
         headerActions={primaryActions}
         peerEndpoint={secondaryEndpoint}
         onOpenPeerSelector={() => {
@@ -561,6 +608,7 @@ function FileExplorerPane({
   activeSessionId,
   activeSessionType,
   activeConnectionId,
+  activeSessionName,
   headerMeta,
   headerActions,
   peerEndpoint,
@@ -571,7 +619,7 @@ function FileExplorerPane({
   onSendEntriesToTarget,
 }: FileExplorerPaneProps) {
   const { t } = useTranslation();
-  const { appSettings, updateUi } = useApp();
+  const { appSettings, updateUi, savedConnections } = useApp();
   const { enqueueDownloads, enqueueUploads } = useTransfer();
   const hasSshSession = !!activeSessionId && activeSessionType === "SSH";
   const hasLocalSession = !!activeSessionId && activeSessionType === "Local";
@@ -688,6 +736,23 @@ function FileExplorerPane({
   const showHiddenFiles = appSettings.ui.file_explorer_show_hidden_files ?? true;
   const listScrollResetKey = `${activeSessionId ?? ""}:${currentPath}`;
   const listFilterResetKey = `${fileSearchQuery}:${fileSortMode.column}:${fileSortMode.direction}`;
+  const activeConnection = useMemo(
+    () =>
+      activeConnectionId
+        ? (savedConnections.find((connection) => connection.id === activeConnectionId) ?? null)
+        : null,
+    [activeConnectionId, savedConnections],
+  );
+  const fileWindowTarget = useMemo(
+    () =>
+      buildFileWindowTarget({
+        backend: explorerBackend,
+        connection: activeConnection,
+        sessionName: activeSessionName,
+        remoteLabel: t("fileEditor.remoteTarget"),
+      }),
+    [activeConnection, activeSessionName, explorerBackend, t],
+  );
 
   useEffect(() => {
     if (!onDirectoryStateChange) return;
@@ -1683,6 +1748,7 @@ function FileExplorerPane({
         name: entry.name,
         size: entry.size,
         mtime: entry.mtime,
+        target: fileWindowTarget,
       });
     } catch (error) {
       toast.error(getErrorMessage(error) || t("filePreview.openFailed"));
@@ -2400,6 +2466,7 @@ function FileExplorerPane({
         name: entry.name,
         size: entry.size,
         mtime: entry.mtime,
+        target: fileWindowTarget,
       });
     } catch (error) {
       toast.error(getErrorMessage(error) || t("fileExplorer.openInternalFailed"));

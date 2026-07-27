@@ -558,6 +558,12 @@ export function openAutoUpload(data: { sessionId: string; localPath: string; rem
   });
 }
 
+export interface FileWindowTarget {
+  kind: "remote" | "local";
+  label: string;
+  detail?: string;
+}
+
 export interface RemoteFileEditorWindowData {
   sessionId: string;
   backend?: "remote" | "local";
@@ -566,6 +572,7 @@ export interface RemoteFileEditorWindowData {
   name: string;
   size: number;
   mtime: number;
+  target?: FileWindowTarget;
 }
 
 export function openRemoteFileEditor(data: RemoteFileEditorWindowData) {
@@ -599,6 +606,7 @@ export interface FilePreviewWindowData {
   name: string;
   size: number;
   mtime: number;
+  target?: FileWindowTarget;
 }
 
 export function openFilePreview(data: FilePreviewWindowData) {
