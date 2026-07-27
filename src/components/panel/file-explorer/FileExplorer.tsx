@@ -105,7 +105,6 @@ import {
   type FileSortColumn,
   type FileSortMode,
   fileExplorerSessionCacheStore,
-  formatExplorerPathFromHome,
   getExplorerParentDirectory,
   getLocalPathName,
   getRemoteFileTextKind,
@@ -2446,10 +2445,7 @@ function FileExplorerPane({
     await handleOpenExternal(entry);
   };
 
-  const displayPath = (() => {
-    if (!homeDir || !currentPath) return currentPath || "~";
-    return formatExplorerPathFromHome(currentPath, homeDir, explorerBackend);
-  })();
+  const displayPath = currentPath || homeDir || "~";
 
   const displayEntries = useMemo(() => {
     const normalizedPath = normalizeExplorerPath(currentPath, explorerBackend);
