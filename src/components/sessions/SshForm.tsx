@@ -1355,12 +1355,15 @@ export function SshForm({
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
-          <DialogHeader>
+        <DialogContent
+          className="flex! w-[min(42rem,calc(100vw-3rem))] max-w-none max-h-[76vh]! min-h-0 flex-col overflow-hidden!"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <DialogHeader className="shrink-0">
             <DialogTitle>{t("settings.keyManagement")}</DialogTitle>
             <DialogDescription className="sr-only">{t("settings.keyManagement")}</DialogDescription>
           </DialogHeader>
-          <div className="overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-1 terminal-scroll">
             <KeyManagementTab />
           </div>
         </DialogContent>
