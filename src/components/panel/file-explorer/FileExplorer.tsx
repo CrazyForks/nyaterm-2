@@ -71,8 +71,9 @@ import { openAIAssistant } from "@/lib/aiEvents";
 import { getErrorMessage } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
 import { logger } from "@/lib/logger";
-import { sendSessionInput } from "@/lib/sessionInput";
+import { sendSessionInput, sendSessionInputWithSync } from "@/lib/sessionInput";
 import { matchesKeyEvent } from "@/lib/shortcutRegistry";
+import { getSessionInputPeerIds } from "@/lib/syncInputGroups";
 import { cn, formatSize } from "@/lib/utils";
 import type { FileWindowTarget } from "@/lib/windowManager";
 import { openAutoUpload, openFilePreview, openRemoteFileEditor } from "@/lib/windowManager";
@@ -619,7 +620,7 @@ function FileExplorerPane({
   onSendEntriesToTarget,
 }: FileExplorerPaneProps) {
   const { t } = useTranslation();
-  const { appSettings, updateUi, savedConnections } = useApp();
+  const { appSettings, updateUi, savedConnections, tabs, syncGroups, broadcastToAll } = useApp();
   const { enqueueDownloads, enqueueUploads } = useTransfer();
   const hasSshSession = !!activeSessionId && activeSessionType === "SSH";
   const hasLocalSession = !!activeSessionId && activeSessionType === "Local";
@@ -1715,10 +1716,28 @@ function FileExplorerPane({
     navigator.clipboard.writeText(currentPath);
   };
 
+  const sendTextToTerminal = useCallback(
+    (text: string) => {
+      if (!activeSessionId || !text) return;
+      const peerSessionIds = getSessionInputPeerIds(
+        activeSessionId,
+        syncGroups,
+        tabs,
+        broadcastToAll,
+      );
+      const sendInput =
+        peerSessionIds.length > 0
+          ? sendSessionInputWithSync(activeSessionId, text, peerSessionIds)
+          : sendSessionInput(activeSessionId, text);
+
+      sendInput.catch(() => {});
+      emit(`focus-terminal-${activeSessionId}`).catch(() => {});
+    },
+    [activeSessionId, broadcastToAll, syncGroups, tabs],
+  );
+
   const handleSendCurrentPathToTerminal = () => {
-    if (!activeSessionId) return;
-    sendSessionInput(activeSessionId, currentPath).catch(() => {});
-    emit(`focus-terminal-${activeSessionId}`).catch(() => {});
+    sendTextToTerminal(currentPath);
   };
 
   const selectedRealFiles = useMemo(
@@ -2147,8 +2166,7 @@ function FileExplorerPane({
     else if (mode === "name") text = entry.name;
     else text = getEntryFullPath(entry);
 
-    sendSessionInput(activeSessionId, text).catch(() => {});
-    emit(`focus-terminal-${activeSessionId}`).catch(() => {});
+    sendTextToTerminal(text);
   };
 
   const buildDeleteItems = (entries: FileEntry[]): DeleteDialogItem[] => {
@@ -3010,10 +3028,7 @@ function FileExplorerPane({
                     size="icon"
                     className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
                     onClick={() => {
-                      if (activeSessionId && currentPath) {
-                        sendSessionInput(activeSessionId, currentPath).catch(() => {});
-                        emit(`focus-terminal-${activeSessionId}`).catch(() => {});
-                      }
+                      sendTextToTerminal(currentPath);
                     }}
                   >
                     <LuClipboardPaste className="h-[0.875rem] w-[0.875rem]" />

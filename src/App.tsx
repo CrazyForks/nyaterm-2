@@ -54,7 +54,7 @@ import {
   sendSessionInputWithSync,
 } from "./lib/sessionInput";
 import { buildSmartSplitLayout, type SmartSplitMode } from "./lib/smartSplit";
-import { getSyncPeers, purgeSessionFromGroups } from "./lib/syncInputGroups";
+import { getSessionInputPeerIds, purgeSessionFromGroups } from "./lib/syncInputGroups";
 import {
   findTerminalWindowLeafById,
   findTerminalWindowLeafByTabId,
@@ -1271,19 +1271,7 @@ function App() {
 
   const getQuickCommandPeerSessionIds = useCallback(
     (sessionId: string) => {
-      const peerSessionIds = new Set(getSyncPeers(sessionId, syncGroups));
-
-      if (broadcastToAll) {
-        for (const tab of tabs) {
-          for (const pane of collectSessionPanes(tab.root)) {
-            if (pane.sessionId !== sessionId && hasLiveSession(pane)) {
-              peerSessionIds.add(pane.sessionId);
-            }
-          }
-        }
-      }
-
-      return [...peerSessionIds];
+      return getSessionInputPeerIds(sessionId, syncGroups, tabs, broadcastToAll);
     },
     [broadcastToAll, syncGroups, tabs],
   );
