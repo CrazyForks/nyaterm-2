@@ -14,6 +14,8 @@ type ChildWindowStateKey =
   | "settings"
   | "new-session"
   | "quick-command"
+  | "proxy"
+  | "tunnel"
   | "file-editor"
   | "file-preview";
 
@@ -35,7 +37,13 @@ const AUTO_UPLOAD_WINDOW_PREFIX = "auto-upload-";
 const FILE_EDITOR_WINDOW_PREFIX = "file-editor-";
 const FILE_PREVIEW_WINDOW_PREFIX = "file-preview-";
 const AUTO_UPLOAD_OWNER_SEPARATOR = "--";
-const MODAL_CHILD_BASE_LABELS = new Set(["settings", "new-session", "quick-command"]);
+const MODAL_CHILD_BASE_LABELS = new Set([
+  "settings",
+  "new-session",
+  "quick-command",
+  "proxy",
+  "tunnel",
+]);
 const MODAL_GROUP_RAISE_SUPPRESS_MS = 250;
 const MODAL_TOPMOST_PULSE_MS = 120;
 const CHILD_WINDOW_READY_EVENT = "child-window-ready";
@@ -538,6 +546,36 @@ export function openQuickCommand(editJson?: string) {
     width: 540,
     height: 640,
     stateKey: "quick-command",
+  });
+}
+
+export function openProxyConfig(editId?: string) {
+  const url = editId
+    ? `index.html?window=proxy&owner=${encodeURIComponent(ownerMainWindowLabel)}&edit=${encodeURIComponent(editId)}`
+    : `index.html?window=proxy&owner=${encodeURIComponent(ownerMainWindowLabel)}`;
+  return openChildWindow({
+    label: scopedModalLabel("proxy"),
+    title: i18n.t(editId ? "network.editProxy" : "network.newProxy"),
+    url,
+    parentLabel: ownerMainWindowLabel,
+    width: 520,
+    height: 560,
+    stateKey: "proxy",
+  });
+}
+
+export function openTunnelConfig(editId?: string) {
+  const url = editId
+    ? `index.html?window=tunnel&owner=${encodeURIComponent(ownerMainWindowLabel)}&edit=${encodeURIComponent(editId)}`
+    : `index.html?window=tunnel&owner=${encodeURIComponent(ownerMainWindowLabel)}`;
+  return openChildWindow({
+    label: scopedModalLabel("tunnel"),
+    title: i18n.t(editId ? "network.editTunnel" : "network.newTunnel"),
+    url,
+    parentLabel: ownerMainWindowLabel,
+    width: 680,
+    height: 640,
+    stateKey: "tunnel",
   });
 }
 

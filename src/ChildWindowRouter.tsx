@@ -12,6 +12,8 @@ import {
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const NewSessionPage = lazy(() => import("./pages/NewSessionPage"));
 const QuickCommandPage = lazy(() => import("./pages/QuickCommandPage"));
+const ProxyPage = lazy(() => import("./pages/ProxyPage"));
+const TunnelPage = lazy(() => import("./pages/TunnelPage"));
 const AutoUploadPage = lazy(() => import("./pages/FileUploadPage"));
 const RemoteFileEditorPage = lazy(() => import("./pages/RemoteFileEditorPage"));
 const FilePreviewPage = lazy(() => import("./pages/FilePreviewPage"));
@@ -20,6 +22,8 @@ const PAGES: Record<string, React.ComponentType> = {
   settings: SettingsPage,
   "new-session": NewSessionPage,
   "quick-command": QuickCommandPage,
+  proxy: ProxyPage,
+  tunnel: TunnelPage,
   "auto-upload": AutoUploadPage,
   "file-editor": RemoteFileEditorPage,
   "file-preview": FilePreviewPage,

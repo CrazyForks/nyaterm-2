@@ -11,7 +11,7 @@ import {
   MdKeyboardArrowUp,
   MdSettings,
 } from "react-icons/md";
-import { ConnectionCombobox, type ConnectionOption } from "@/components/dialog/network/shared";
+import { ConnectionCombobox, type ConnectionOption } from "@/components/network/shared";
 import { KeyManagementTab } from "@/components/panel/security-auth/KeyManagementTab";
 import { PasswordManagementTab } from "@/components/panel/security-auth/PasswordManagementTab";
 import { Button } from "@/components/ui/button";

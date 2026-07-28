@@ -4,11 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdAdd, MdExpandMore } from "react-icons/md";
 import {
-  buildGroupPath,
-  type ConnectionOption,
-  sortLabel,
-} from "@/components/dialog/network/shared";
-import {
   DEFAULT_CONNECTION_ICON,
   LINUX_ICONS,
   resolveConnectionIcon,
@@ -16,6 +11,7 @@ import {
   SYSTEM_ICONS,
 } from "@/components/icons";
 import ChildWindowHeader from "@/components/layout/ChildWindowHeader";
+import { buildGroupPath, type ConnectionOption, sortLabel } from "@/components/network/shared";
 import { LocalTerminal } from "@/components/sessions/LocalTerminal";
 import { SerialForm } from "@/components/sessions/SerialForm";
 import { type SshAuthMode, SshForm } from "@/components/sessions/SshForm";
