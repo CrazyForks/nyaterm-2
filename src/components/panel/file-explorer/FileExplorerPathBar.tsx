@@ -400,6 +400,17 @@ export function FileExplorerPathBar({
         </div>
       )}
 
+      {!isEditingPath && (
+        <button
+          type="button"
+          className="ml-1 h-5 shrink-0 rounded transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          style={{ flex: "0 0 clamp(28px, 12%, 56px)" }}
+          title={t("fileExplorer.editPath")}
+          aria-label={t("fileExplorer.editPath")}
+          onClick={beginPathEditing}
+        />
+      )}
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
