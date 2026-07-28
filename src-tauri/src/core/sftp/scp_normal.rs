@@ -1423,4 +1423,56 @@ impl RemoteFs for ScpNormalBackend {
             }
         }
     }
+
+    async fn copy_remote_file_to_local_with_controller(
+        &self,
+        app: &tauri::AppHandle,
+        _session_id: &str,
+        remote_path: &str,
+        local_path: &str,
+        transfer_settings: &crate::config::TransferSettings,
+        controller: Arc<TransferController>,
+        parent_controller: Option<Arc<TransferController>>,
+    ) -> AppResult<u64> {
+        download_file_inner(
+            &self.ssh_handle,
+            app,
+            remote_path,
+            local_path,
+            controller,
+            parent_controller,
+            transfer_settings,
+        )
+        .await?;
+        tokio::fs::metadata(local_path)
+            .await
+            .map(|metadata| metadata.len())
+            .map_err(|error| AppError::Channel(format!("Failed to read copied file size: {error}")))
+    }
+
+    async fn copy_local_file_to_remote_with_controller(
+        &self,
+        app: &tauri::AppHandle,
+        _session_id: &str,
+        local_path: &str,
+        remote_path: &str,
+        transfer_settings: &crate::config::TransferSettings,
+        controller: Arc<TransferController>,
+        parent_controller: Option<Arc<TransferController>>,
+    ) -> AppResult<u64> {
+        upload_file_inner(
+            &self.ssh_handle,
+            app,
+            local_path,
+            remote_path,
+            controller,
+            parent_controller,
+            transfer_settings,
+        )
+        .await?;
+        tokio::fs::metadata(local_path)
+            .await
+            .map(|metadata| metadata.len())
+            .map_err(|error| AppError::Channel(format!("Failed to read copied file size: {error}")))
+    }
 }

@@ -944,4 +944,58 @@ impl RemoteFs for SftpBackend {
             }
         }
     }
+
+    async fn copy_remote_file_to_local_with_controller(
+        &self,
+        app: &tauri::AppHandle,
+        session_id: &str,
+        remote_path: &str,
+        local_path: &str,
+        transfer_settings: &crate::config::TransferSettings,
+        controller: Arc<TransferController>,
+        parent_controller: Option<Arc<TransferController>>,
+    ) -> AppResult<u64> {
+        download_remote_file_inner_with_controller(
+            self,
+            app,
+            session_id,
+            remote_path,
+            local_path,
+            transfer_settings,
+            controller,
+            parent_controller,
+        )
+        .await?;
+        tokio::fs::metadata(local_path)
+            .await
+            .map(|metadata| metadata.len())
+            .map_err(|error| AppError::Channel(format!("Failed to read copied file size: {error}")))
+    }
+
+    async fn copy_local_file_to_remote_with_controller(
+        &self,
+        app: &tauri::AppHandle,
+        session_id: &str,
+        local_path: &str,
+        remote_path: &str,
+        transfer_settings: &crate::config::TransferSettings,
+        controller: Arc<TransferController>,
+        parent_controller: Option<Arc<TransferController>>,
+    ) -> AppResult<u64> {
+        upload_local_file_inner_with_controller(
+            self,
+            app,
+            session_id,
+            local_path,
+            remote_path,
+            transfer_settings,
+            controller,
+            parent_controller,
+        )
+        .await?;
+        tokio::fs::metadata(local_path)
+            .await
+            .map(|metadata| metadata.len())
+            .map_err(|error| AppError::Channel(format!("Failed to read copied file size: {error}")))
+    }
 }
