@@ -60,6 +60,8 @@ fn prepare_nyaterm_json_import(file: NyatermJsonImportFile) -> AppResult<Prepare
             key: Some(crypto::encrypt(&entry.private_key)?),
             cert: encrypt_optional_secret(entry.certificate)?,
             passphrase: encrypt_optional_secret(entry.passphrase)?,
+            key_data: None,
+            cert_data: None,
             key_file_path: None,
             cert_file_path: None,
             has_key_data: false,

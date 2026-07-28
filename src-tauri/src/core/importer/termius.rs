@@ -942,6 +942,8 @@ fn prepare_termius_keys(keys: &[TermiusRawSshKey]) -> AppResult<PreparedTermiusK
             key: Some(crypto::encrypt(&private_key)?),
             cert: None,
             passphrase: encrypt_optional_secret(key.passphrase.clone())?,
+            key_data: None,
+            cert_data: None,
             key_file_path: None,
             cert_file_path: None,
             has_key_data: false,

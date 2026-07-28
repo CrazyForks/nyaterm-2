@@ -129,6 +129,10 @@ export interface Group {
 export interface SshKey {
   id: string;
   name: string;
+  /** Transient: plaintext private key content pasted from the UI. */
+  key_data?: string;
+  /** Transient: plaintext certificate content pasted from the UI. */
+  cert_data?: string;
   /** Encrypted certificate content is never returned to the UI. */
   cert?: string;
   /** True when encrypted key data exists in local storage. */
