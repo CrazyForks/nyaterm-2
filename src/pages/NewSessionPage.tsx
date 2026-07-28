@@ -870,7 +870,7 @@ export default function NewSessionPage() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="min-w-[12rem] flex-1">
+            <div className="min-w-48 flex-1">
               <Label className="text-xs font-medium text-foreground/80">
                 {t("dialog.connectionName")}
               </Label>
@@ -881,7 +881,7 @@ export default function NewSessionPage() {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div className="min-w-[12rem] flex-1 sm:max-w-[18rem]">
+            <div className="min-w-48 flex-1 sm:max-w-[18rem]">
               <Label className="text-xs font-medium text-foreground/80">{t("dialog.group")}</Label>
               <Popover
                 open={showGroupDropdown}
@@ -909,7 +909,7 @@ export default function NewSessionPage() {
                   side="bottom"
                   sideOffset={4}
                   collisionPadding={16}
-                  className="w-[var(--radix-popover-trigger-width)] min-w-[12rem] overflow-hidden p-0"
+                  className="w-(--radix-popover-trigger-width) min-w-48 overflow-hidden p-0"
                 >
                   <div className="max-h-48 overflow-y-auto">
                     <button

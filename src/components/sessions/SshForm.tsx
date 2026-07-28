@@ -790,7 +790,7 @@ export function SshForm({
                     side="bottom"
                     sideOffset={4}
                     collisionPadding={16}
-                    className="w-[var(--radix-popover-trigger-width)] min-w-[14rem] overflow-hidden p-0"
+                    className="w-(--radix-popover-trigger-width) min-w-56 overflow-hidden p-0"
                   >
                     <div className="max-h-40 overflow-y-auto overflow-x-hidden">
                       <button
@@ -863,7 +863,7 @@ export function SshForm({
                 side="bottom"
                 sideOffset={4}
                 collisionPadding={16}
-                className="w-[var(--radix-popover-trigger-width)] min-w-[14rem] overflow-hidden p-0"
+                className="w-(--radix-popover-trigger-width) min-w-56 overflow-hidden p-0"
               >
                 <div className="max-h-40 overflow-y-auto overflow-x-hidden">
                   <button
@@ -1375,7 +1375,7 @@ export function SshForm({
         }}
       >
         <DialogContent
-          className="!flex w-[min(27rem,calc(100vw-3rem))] max-w-none !max-h-[76vh] min-h-0 flex-col !overflow-hidden"
+          className="flex! w-[min(27rem,calc(100vw-3rem))] max-w-none max-h-[76vh]! min-h-0 flex-col overflow-hidden!"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader className="shrink-0">
