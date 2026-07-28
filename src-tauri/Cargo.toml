@@ -98,7 +98,7 @@ tokio = { version = "1", features = [
 ] }
 russh = { path = "vendor/russh/russh", default-features = false, features = ["des", "dsa", "flate2", "ring", "rsa"] }
 russh-sftp = { path = "vendor/russh-sftp" }
-ssh-key = { version = "0.6", features = ["std"] }
+ssh-key = { version = "0.6", features = ["ed25519", "std"] }
 portable-pty = "0.8"
 uuid = { version = "1", features = ["v4"] }
 async-trait = "0.1"
