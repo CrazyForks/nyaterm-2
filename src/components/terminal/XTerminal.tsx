@@ -73,6 +73,7 @@ import {
 import {
   consumePreservedTerminalReconnectContent,
   registerTerminalReconnectCapture,
+  type TerminalReconnectSnapshot,
 } from "@/lib/terminalReconnectHistory";
 import { TERMINAL_SEARCH_VISIBLE_MATCH_LIMIT } from "@/lib/terminalSearch";
 import { XTERM_PERFORMANCE_CONFIG } from "@/lib/xtermPerformance";
@@ -215,6 +216,12 @@ type PendingWakeEvent =
 
 const snapshotUtf8Encoder = new TextEncoder();
 
+interface SerializedTerminalSnapshot {
+  content: string;
+  captureStartLine: number;
+  captureEndLine: number;
+}
+
 function createOutputQueue(): OutputQueue {
   return { chunks: [], headIndex: 0, bytes: 0 };
 }
@@ -230,29 +237,44 @@ function utf8BytesForCodePoint(codePoint: number): number {
   return 4;
 }
 
-function serializeTerminalText(terminal: Terminal, serializeAddon?: SerializeAddon | null): string {
+function serializeTerminalSnapshot(
+  terminal: Terminal,
+  serializeAddon?: SerializeAddon | null,
+): SerializedTerminalSnapshot {
   const limits = XTERM_PERFORMANCE_CONFIG.lifecycle;
+  const buffer = terminal.buffer.active;
+  const lastLine = Math.min(buffer.length - 1, buffer.baseY + buffer.cursorY);
+
+  if (lastLine < 0) {
+    return {
+      content: "",
+      captureStartLine: 0,
+      captureEndLine: 0,
+    };
+  }
 
   if (serializeAddon) {
-    let scrollback = Math.min(limits.snapshotMaxLines, terminal.buffer.active.length);
+    let scrollback = Math.min(limits.snapshotMaxLines, buffer.length);
     while (scrollback >= 0) {
       const snapshot = serializeAddon.serialize({
         scrollback,
         excludeAltBuffer: true,
       });
       if (utf8ByteLength(snapshot) <= limits.snapshotMaxBytes || scrollback === 0) {
-        return snapshot;
+        const capturedLines = Math.max(1, Math.min(scrollback || terminal.rows, buffer.length));
+        return {
+          content: snapshot,
+          captureStartLine: Math.max(0, lastLine - capturedLines + 1),
+          captureEndLine: lastLine,
+        };
       }
       scrollback = Math.floor(scrollback / 2);
     }
   }
 
-  const buffer = terminal.buffer.active;
-  const lastLine = Math.min(buffer.length - 1, buffer.baseY + buffer.cursorY);
-  if (lastLine < 0) return "";
-
   const lines: string[] = [];
   let bytes = 0;
+  let includedFirstLine = lastLine;
   const firstLine = Math.max(0, lastLine - limits.snapshotMaxLines + 1);
   for (let lineIndex = lastLine; lineIndex >= firstLine; lineIndex -= 1) {
     const line = buffer.getLine(lineIndex);
@@ -261,9 +283,14 @@ function serializeTerminalText(terminal: Terminal, serializeAddon?: SerializeAdd
     if (lines.length > 0 && bytes + lineBytes > limits.snapshotMaxBytes) break;
     lines.push(text);
     bytes += lineBytes;
+    includedFirstLine = lineIndex;
   }
 
-  return lines.reverse().join("\r\n");
+  return {
+    content: lines.reverse().join("\r\n"),
+    captureStartLine: includedFirstLine,
+    captureEndLine: lastLine,
+  };
 }
 
 function splitOutputChunk(chunk: QueuedOutputChunk, maxBytes: number): QueuedOutputChunk[] {
@@ -462,8 +489,8 @@ export default function XTerminal({
   const disconnectedNoticeShownRef = useRef(false);
   const disconnectedCloseRequestedRef = useRef(false);
   const reconnectingRef = useRef(false);
-  const preservedReconnectContentRef = useRef<string | null>(null);
-  const hibernationSnapshotRef = useRef<string | null>(null);
+  const preservedReconnectContentRef = useRef<TerminalReconnectSnapshot | null>(null);
+  const hibernationSnapshotRef = useRef<TerminalReconnectSnapshot | null>(null);
   const hibernateTimerRef = useRef<number | null>(null);
   const hibernationCleanupRef = useRef(false);
   const hibernationPendingRef = useRef(false);
@@ -872,20 +899,75 @@ export default function XTerminal({
     credentialPromptInputUntilRef.current = 0;
     shellIntegrationRef.current.enabled = false;
     shellIntegrationRef.current.commandRunning = false;
-    const preservedReconnectContent =
+
+    const getCurrentAbsoluteLine = () =>
+      gutterLineOffsetRef.current + terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
+
+    const captureReconnectSnapshot = (contentSuffix = ""): TerminalReconnectSnapshot => {
+      const serialized = serializeTerminalSnapshot(terminal, serializeAddon);
+      const captureStartLine = gutterLineOffsetRef.current + serialized.captureStartLine;
+      const captureEndLine = gutterLineOffsetRef.current + serialized.captureEndLine;
+      const lineTimestamps: Array<[number, number]> = [];
+
+      for (const [line, timestamp] of lineTimestampsRef.current) {
+        if (
+          line >= captureStartLine &&
+          line <= captureEndLine &&
+          Number.isFinite(line) &&
+          Number.isFinite(timestamp)
+        ) {
+          lineTimestamps.push([line, timestamp]);
+        }
+      }
+
+      return {
+        content: `${serialized.content}${contentSuffix}`,
+        lineTimestamps,
+        captureStartLine,
+        captureEndLine,
+      };
+    };
+
+    const restoreLineTimestampsFromSnapshot = (snapshot: TerminalReconnectSnapshot) => {
+      if (snapshot.lineTimestamps.length === 0) return;
+
+      const restoredEndLine = getCurrentAbsoluteLine();
+      const lineDelta = restoredEndLine - snapshot.captureEndLine;
+      const minLine = gutterLineOffsetRef.current;
+      const maxLine = restoredEndLine;
+      const next = new Map<number, number>();
+
+      for (const [line, timestamp] of snapshot.lineTimestamps) {
+        const restoredLine = line + lineDelta;
+        if (
+          Number.isFinite(restoredLine) &&
+          Number.isFinite(timestamp) &&
+          restoredLine >= minLine &&
+          restoredLine <= maxLine
+        ) {
+          next.set(restoredLine, timestamp);
+        }
+      }
+
+      lineTimestampsRef.current = next;
+    };
+
+    const preservedReconnectSnapshot =
       hibernationSnapshotRef.current ??
       preservedReconnectContentRef.current ??
       consumePreservedTerminalReconnectContent(sessionId);
     hibernationSnapshotRef.current = null;
     preservedReconnectContentRef.current = null;
-    const initialReplayPromise = preservedReconnectContent
-      ? writeTextInFrames(terminal, preservedReconnectContent)
+    const initialReplayPromise = preservedReconnectSnapshot?.content
+      ? writeTextInFrames(terminal, preservedReconnectSnapshot.content).then(() => {
+          restoreLineTimestampsFromSnapshot(preservedReconnectSnapshot);
+        })
       : Promise.resolve();
-    if (preservedReconnectContent) {
+    if (preservedReconnectSnapshot?.content) {
       outputWriteQueueRef.current = initialReplayPromise.catch(() => {});
     }
     const unregisterReconnectCapture = registerTerminalReconnectCapture(sessionId, () =>
-      serializeTerminalText(terminal, serializeAddon),
+      captureReconnectSnapshot(),
     );
     const isTerminalAlive = () => !disposed && terminalRef.current === terminal;
     const syncSuggestionsWithInputState = () => {
@@ -2024,7 +2106,14 @@ export default function XTerminal({
               }
 
               try {
-                terminal.write(data, () => resolve());
+                const ts = Date.now();
+                const beforeLine = getCurrentAbsoluteLine();
+                terminal.write(data, () => {
+                  if (isTerminalAlive()) {
+                    stampWrittenLines(beforeLine, getCurrentAbsoluteLine(), ts);
+                  }
+                  resolve();
+                });
               } catch {
                 resolve();
               }
@@ -2280,9 +2369,8 @@ export default function XTerminal({
           return;
         }
 
-        const serialized = serializeTerminalText(terminal, serializeAddon);
         const queuedTail = outputQueueToBoundedString(outputQueueRef.current);
-        hibernationSnapshotRef.current = `${serialized}${queuedTail}`;
+        hibernationSnapshotRef.current = captureReconnectSnapshot(queuedTail);
         hibernationCleanupRef.current = true;
         rendererDetached = false;
         setTerminalReady(false);
@@ -2516,13 +2604,13 @@ export default function XTerminal({
       if (disconnectedRef.current) {
         if (data === "\r" && canReconnectDisconnectedSession() && !reconnectingRef.current) {
           reconnectingRef.current = true;
-          terminal.write(`\r\n\x1b[36m[${tRef.current("terminal.reconnecting")}]\x1b[0m\r\n`);
-          createReconnectedSession()
-            .then((newSessionId) => {
-              preservedReconnectContentRef.current = serializeTerminalText(
-                terminal,
-                serializeAddon,
+          void (async () => {
+            try {
+              await writeTerminalTextAfterOutputQueue(
+                `\r\n\x1b[36m[${tRef.current("terminal.reconnecting")}]\x1b[0m\r\n`,
               );
+              const newSessionId = await createReconnectedSession();
+              preservedReconnectContentRef.current = captureReconnectSnapshot();
               const oldSessionId = sessionIdRef.current;
               disconnectedRef.current = false;
               disconnectedNoticeShownRef.current = false;
@@ -2534,16 +2622,16 @@ export default function XTerminal({
                 }),
               );
               onReconnectedRef.current?.(oldSessionId, newSessionId);
-            })
-            .catch((err) => {
+            } catch (err) {
               reconnectingRef.current = false;
-              terminal.write(
+              await writeTerminalTextAfterOutputQueue(
                 `\r\n\x1b[31m[${tRef.current("terminal.reconnectFailed")}: ${err}]\x1b[0m\r\n`,
               );
-              terminal.write(
+              await writeTerminalTextAfterOutputQueue(
                 `\x1b[33m[${tRef.current("terminal.pressEnterToReconnect")}]\x1b[0m\r\n`,
               );
-            });
+            }
+          })();
         }
         if (
           data === "\x04" &&
@@ -2920,7 +3008,7 @@ export default function XTerminal({
         latestLifecycleState.sessionId === sessionId &&
         latestLifecycleState.terminalTransparencyEnabled !== terminalTransparencyEnabled
       ) {
-        preservedReconnectContentRef.current = serializeTerminalText(terminal, serializeAddon);
+        preservedReconnectContentRef.current = captureReconnectSnapshot();
       }
       terminal.dispose();
       terminalRef.current = null;
