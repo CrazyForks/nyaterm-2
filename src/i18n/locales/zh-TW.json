@@ -640,6 +640,21 @@
     "reloadApplication": "重新載入應用程式",
     "somethingWentWrong": "出現錯誤"
   },
+  "externalOpen": {
+    "continueConnection": "繼續連線",
+    "inlinePassword": "外部連結不能傳遞密碼。需要憑證時 NyaTerm 會提示輸入。",
+    "invalidPort": "外部連結連接埠必須在 1 到 65535 之間。",
+    "invalidUrl": "無效的外部連線連結。",
+    "matchDescription": "選擇要用於處理此外部連結的已儲存連線。",
+    "matchTitle": "選擇連線",
+    "missingHost": "外部連結缺少主機。",
+    "postLoginConfirmDescription": "{{name}} 已啟用登入後命令。連線前請先確認。",
+    "postLoginConfirmTitle": "執行登入後命令？",
+    "processingFailed": "處理外部連線連結失敗。",
+    "unsupportedParameter": "此外部連結包含不支援的連線參數。",
+    "unsupportedProtocol": "不支援此外部連結協議。",
+    "useTemporary": "使用臨時連線"
+  },
   "fileEditor": {
     "conflictDesc": "遠端檔案在開啟後已被修改。重新載入可保留遠端版本，強制儲存會覆蓋遠端內容。",
     "conflictTitle": "遠端檔案已變更",
