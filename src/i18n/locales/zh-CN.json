@@ -642,7 +642,7 @@
   },
   "externalOpen": {
     "continueConnection": "继续连接",
-    "inlinePassword": "外部链接不能传递密码。需要凭据时 NyaTerm 会提示输入。",
+    "inlinePassword": "这种链接格式不能传递密码。仅 ssh://user:password@host:port 支持一次性 SSH 密码。",
     "invalidPort": "外部链接端口必须在 1 到 65535 之间。",
     "invalidUrl": "无效的外部连接链接。",
     "matchDescription": "选择要用于处理此外部链接的已保存连接。",
@@ -2317,7 +2317,7 @@
     "connect": "连接",
     "description": "选择协议并直接打开一个不保存的临时会话。",
     "empty": "请输入连接目标。",
-    "inlinePassword": "不支持在输入中携带密码。需要凭据时 NyaTerm 会再询问。",
+    "inlinePassword": "只有 ssh:// URL 可以携带一次性密码，不支持命令形式的内联密码。",
     "invalidBaudRate": "请输入有效的波特率。",
     "invalidInput": "请输入有效的命令、URL 或主机。",
     "invalidPort": "端口必须在 1 到 65535 之间。",

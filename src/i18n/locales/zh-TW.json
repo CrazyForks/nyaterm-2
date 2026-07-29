@@ -642,7 +642,7 @@
   },
   "externalOpen": {
     "continueConnection": "繼續連線",
-    "inlinePassword": "外部連結不能傳遞密碼。需要憑證時 NyaTerm 會提示輸入。",
+    "inlinePassword": "這種連結格式不能傳遞密碼。僅 ssh://user:password@host:port 支援一次性 SSH 密碼。",
     "invalidPort": "外部連結連接埠必須在 1 到 65535 之間。",
     "invalidUrl": "無效的外部連線連結。",
     "matchDescription": "選擇要用於處理此外部連結的已儲存連線。",
@@ -2312,7 +2312,7 @@
     "connect": "連線",
     "description": "選擇協定並直接開啟一個不儲存的臨時工作階段。",
     "empty": "請輸入連線目標。",
-    "inlinePassword": "不支援在輸入中攜帶密碼。需要登入資訊時 NyaTerm 會再詢問。",
+    "inlinePassword": "只有 ssh:// URL 可以攜帶一次性密碼，不支援命令形式的內聯密碼。",
     "invalidBaudRate": "請輸入有效的波特率。",
     "invalidInput": "請輸入有效的命令、URL 或主機。",
     "invalidPort": "埠必須在 1 到 65535 之間。",

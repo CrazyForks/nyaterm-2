@@ -642,7 +642,7 @@
   },
   "externalOpen": {
     "continueConnection": "Continue Connection",
-    "inlinePassword": "Passwords cannot be passed in external links. NyaTerm will ask for credentials when needed.",
+    "inlinePassword": "This link format cannot pass passwords. Use ssh://user:password@host:port only for one-time SSH passwords.",
     "invalidPort": "External link port must be between 1 and 65535.",
     "invalidUrl": "Invalid external connection link.",
     "matchDescription": "Choose which saved connection should handle this external link.",
@@ -2317,7 +2317,7 @@
     "connect": "Connect",
     "description": "Choose a protocol and open a temporary session without saving it.",
     "empty": "Enter a target.",
-    "inlinePassword": "Inline passwords are not supported. NyaTerm will ask for credentials when needed.",
+    "inlinePassword": "Only ssh:// URLs can include one-time passwords. Command-style inline passwords are not supported.",
     "invalidBaudRate": "Enter a valid baud rate.",
     "invalidInput": "Enter a valid command, URL, or host.",
     "invalidPort": "Port must be between 1 and 65535.",
