@@ -191,8 +191,7 @@ jobs:
           fs.writeFileSync(keyPath, keyText);
           fs.appendFileSync(
             process.env.GITHUB_ENV,
-            `TAURI_SIGNING_PRIVATE_KEY<<${envDelimiter}\n${keyText}\n${envDelimiter}\n` +
-              `TAURI_SIGNING_PRIVATE_KEY_PATH=${keyPath}\n`
+            `TAURI_SIGNING_PRIVATE_KEY<<${envDelimiter}\n${keyText}\n${envDelimiter}\n`
           );
 
           console.log(`Tauri updater signing key prepared at: ${keyPath}`);
@@ -268,6 +267,7 @@ jobs:
           New-Item -ItemType File -Path (Join-Path $dataDir ".keep") -Force | Out-Null
 
           Compress-Archive -Path $portableDir -DestinationPath $assetPath -Force
+          Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY_PATH -ErrorAction SilentlyContinue
           pnpm tauri signer sign --password "$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$assetPath"
 
           $signaturePath = "$assetPath.sig"

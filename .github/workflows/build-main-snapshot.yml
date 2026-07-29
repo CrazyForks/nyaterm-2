@@ -178,8 +178,7 @@ jobs:
           fs.writeFileSync(keyPath, keyText);
           fs.appendFileSync(
             process.env.GITHUB_ENV,
-            `TAURI_SIGNING_PRIVATE_KEY<<${envDelimiter}\n${keyText}\n${envDelimiter}\n` +
-              `TAURI_SIGNING_PRIVATE_KEY_PATH=${keyPath}\n`
+            `TAURI_SIGNING_PRIVATE_KEY<<${envDelimiter}\n${keyText}\n${envDelimiter}\n`
           );
 
           console.log(`Tauri updater signing key prepared at: ${keyPath}`);
