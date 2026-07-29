@@ -124,6 +124,7 @@ sha2 = "0.10"
 sha1 = "0.10"
 zeroize = "1"
 tauri-plugin-dialog = "2"
+tauri-plugin-deep-link = "2"
 notify = { version = "8.2.0", features = ["serde"] }
 lazy_static = "1.5.0"
 open = "5"
@@ -175,7 +176,7 @@ tauri-plugin-updater = { version = "2", default-features = false, features = [
     "zip",
 ] }
 tauri-plugin-process = "2"
-tauri-plugin-single-instance = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38.2"
