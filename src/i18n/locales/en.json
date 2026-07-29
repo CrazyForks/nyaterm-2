@@ -640,6 +640,21 @@
     "reloadApplication": "Reload Application",
     "somethingWentWrong": "Something went wrong"
   },
+  "externalOpen": {
+    "continueConnection": "Continue Connection",
+    "inlinePassword": "Passwords cannot be passed in external links. NyaTerm will ask for credentials when needed.",
+    "invalidPort": "External link port must be between 1 and 65535.",
+    "invalidUrl": "Invalid external connection link.",
+    "matchDescription": "Choose which saved connection should handle this external link.",
+    "matchTitle": "Choose Connection",
+    "missingHost": "External link is missing a host.",
+    "postLoginConfirmDescription": "{{name}} has a post-login command. Review it before connecting.",
+    "postLoginConfirmTitle": "Run Post-login Command?",
+    "processingFailed": "Failed to process external connection link.",
+    "unsupportedParameter": "This external link contains unsupported connection parameters.",
+    "unsupportedProtocol": "This external link protocol is not supported.",
+    "useTemporary": "Use Temporary Connection"
+  },
   "fileEditor": {
     "conflictDesc": "The remote file changed after you opened it. Reload to keep the remote version, or force save to overwrite it.",
     "conflictTitle": "Remote file changed",

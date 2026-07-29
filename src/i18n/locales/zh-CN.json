@@ -640,6 +640,21 @@
     "reloadApplication": "重新加载应用",
     "somethingWentWrong": "出现错误"
   },
+  "externalOpen": {
+    "continueConnection": "继续连接",
+    "inlinePassword": "外部链接不能传递密码。需要凭据时 NyaTerm 会提示输入。",
+    "invalidPort": "外部链接端口必须在 1 到 65535 之间。",
+    "invalidUrl": "无效的外部连接链接。",
+    "matchDescription": "选择要用于处理此外部链接的已保存连接。",
+    "matchTitle": "选择连接",
+    "missingHost": "外部链接缺少主机。",
+    "postLoginConfirmDescription": "{{name}} 启用了登录后命令。连接前请先确认。",
+    "postLoginConfirmTitle": "执行登录后命令？",
+    "processingFailed": "处理外部连接链接失败。",
+    "unsupportedParameter": "此外部链接包含不支持的连接参数。",
+    "unsupportedProtocol": "不支持此外部链接协议。",
+    "useTemporary": "使用临时连接"
+  },
   "fileEditor": {
     "conflictDesc": "远程文件在打开后已被修改。重新加载可保留远程版本，强制保存会覆盖远程内容。",
     "conflictTitle": "远程文件已变更",
