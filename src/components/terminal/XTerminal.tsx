@@ -10,7 +10,6 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import MultiLinePasteDialog from "@/components/dialog/terminal/MultiLinePasteDialog";
 import ExternalFileDropOverlay from "@/components/ExternalFileDropOverlay";
-import type { ResolvedLocalDropPathEntry } from "@/components/panel/file-explorer/model";
 import { useTerminalAppSettings } from "@/context/AppContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useTransfer } from "@/context/TransferContext";
@@ -20,7 +19,6 @@ import { useCredentialAutofill } from "@/hooks/useCredentialAutofill";
 import { useKeywordHighlighter } from "@/hooks/useKeywordHighlighter";
 import { useShellIntegration } from "@/hooks/useShellIntegration";
 import { resolveShortcutKeys } from "@/hooks/useShortcutMap";
-import { useTerminalFileDrop } from "@/hooks/useTerminalFileDrop";
 import { useTerminalSearch } from "@/hooks/useTerminalSearch";
 import { useTerminalSettings } from "@/hooks/useTerminalSettings";
 import { emitAIErrorDetected } from "@/lib/aiEvents";
@@ -59,7 +57,6 @@ import {
 } from "@/lib/shortcutRegistry";
 import { registerTerminalContextProvider } from "@/lib/terminalContext";
 import { sendTerminalClearInput } from "@/lib/terminalControlInput";
-import { getTerminalDropOverlayCopy, handleTerminalFileDrop } from "@/lib/terminalFileDrop";
 import { resolveTerminalFontSize } from "@/lib/terminalFontSize";
 import {
   applyTerminalInputData,
@@ -99,12 +96,32 @@ import {
   readRecentOutput,
 } from "./terminalInputSelection";
 import { createTerminalLinkHandlers } from "./terminalLinkHandlers";
+import { useTerminalExternalDrop } from "./useTerminalExternalDrop";
+import { useTerminalRefreshEffects } from "./useTerminalRefreshEffects";
+import {
+  buildClipboardPathPasteText,
+  decodeOsc52ClipboardText,
+  quotePosixPath,
+} from "./xterminalClipboard";
+import {
+  createOutputQueue,
+  hasOutputQueueItems,
+  type OutputQueue,
+  outputQueueToBoundedString,
+  peekOutputQueue,
+  pushOutputQueue,
+  type QueuedOutputChunk,
+  replaceOutputQueueHead,
+  serializeTerminalSnapshot,
+  shiftOutputQueue,
+  splitOutputChunk,
+  writeTextInFrames,
+} from "./xterminalOutputQueue";
 import type { PerformanceMode, XTerminalProps } from "./xterminalTypes";
 import { createZmodemEventHandler, type ZmodemEventPayload } from "./zmodemTerminalEvents";
 import "@xterm/xterm/css/xterm.css";
 
 const BACKSPACE_INPUT = "\x7f";
-const OSC52_MAX_DECODED_BYTES = 1024 * 1024;
 const LEGACY_CTRL_KEYS = new Set([" ", "@", "[", "\\", "]", "^", "_", "?"]);
 
 interface XTermInternalTrimSource {
@@ -121,54 +138,6 @@ interface XTermInternalTrimSource {
       };
     };
   };
-}
-
-function isWindowsPlatform() {
-  return /win/i.test(navigator.platform || "");
-}
-
-function quotePastedPath(path: string) {
-  if (isWindowsPlatform()) {
-    return `"${path.replace(/"/g, '\\"')}"`;
-  }
-  return quotePosixPath(path);
-}
-
-function quotePosixPath(path: string) {
-  return `'${path.replace(/'/g, "'\\''")}'`;
-}
-
-function buildClipboardPathPasteText(
-  payload: Awaited<ReturnType<typeof readClipboardPathPayload>>,
-) {
-  if (!payload) return null;
-  if (payload.kind === "image_file") {
-    return payload.path ? quotePastedPath(payload.path) : null;
-  }
-
-  const paths = payload.paths.map((path) => path.trim()).filter((path) => !!path);
-  if (paths.length === 0) return null;
-  return paths.map(quotePastedPath).join(" ");
-}
-
-function decodeOsc52ClipboardText(data: string): string | null {
-  const separatorIndex = data.indexOf(";");
-  if (separatorIndex === -1) return null;
-
-  const payload = data.slice(separatorIndex + 1).replace(/\s/g, "");
-  if (payload === "?") return null;
-
-  let binary = "";
-  try {
-    binary = atob(payload);
-  } catch {
-    return null;
-  }
-
-  if (binary.length > OSC52_MAX_DECODED_BYTES) return null;
-
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
 }
 
 function getCtrlPrintableCsiuInput(e: KeyboardEvent): string | null {
@@ -196,224 +165,12 @@ interface TerminalOutputPayload {
   droppedBytes?: number;
 }
 
-interface QueuedOutputChunk {
-  data: string;
-  bytes: number;
-}
-
-interface OutputQueue {
-  chunks: QueuedOutputChunk[];
-  headIndex: number;
-  bytes: number;
-}
-
 type PendingWakeEvent =
   | { type: "error"; message: string }
   | { type: "closed" }
   | { type: "focus" }
   | { type: "zmodem"; payload: ZmodemEventPayload }
   | { type: "ai"; payload: AiCaptureEvent };
-
-const snapshotUtf8Encoder = new TextEncoder();
-
-interface SerializedTerminalSnapshot {
-  content: string;
-  captureStartLine: number;
-  captureEndLine: number;
-}
-
-function createOutputQueue(): OutputQueue {
-  return { chunks: [], headIndex: 0, bytes: 0 };
-}
-
-function utf8ByteLength(text: string): number {
-  return snapshotUtf8Encoder.encode(text).length;
-}
-
-function utf8BytesForCodePoint(codePoint: number): number {
-  if (codePoint <= 0x7f) return 1;
-  if (codePoint <= 0x7ff) return 2;
-  if (codePoint <= 0xffff) return 3;
-  return 4;
-}
-
-function serializeTerminalSnapshot(
-  terminal: Terminal,
-  serializeAddon?: SerializeAddon | null,
-): SerializedTerminalSnapshot {
-  const limits = XTERM_PERFORMANCE_CONFIG.lifecycle;
-  const buffer = terminal.buffer.active;
-  const lastLine = Math.min(buffer.length - 1, buffer.baseY + buffer.cursorY);
-
-  if (lastLine < 0) {
-    return {
-      content: "",
-      captureStartLine: 0,
-      captureEndLine: 0,
-    };
-  }
-
-  if (serializeAddon) {
-    let scrollback = Math.min(limits.snapshotMaxLines, buffer.length);
-    while (scrollback >= 0) {
-      const snapshot = serializeAddon.serialize({
-        scrollback,
-        excludeAltBuffer: true,
-      });
-      if (utf8ByteLength(snapshot) <= limits.snapshotMaxBytes || scrollback === 0) {
-        const capturedLines = Math.max(1, Math.min(scrollback || terminal.rows, buffer.length));
-        return {
-          content: snapshot,
-          captureStartLine: Math.max(0, lastLine - capturedLines + 1),
-          captureEndLine: lastLine,
-        };
-      }
-      scrollback = Math.floor(scrollback / 2);
-    }
-  }
-
-  const lines: string[] = [];
-  let bytes = 0;
-  let includedFirstLine = lastLine;
-  const firstLine = Math.max(0, lastLine - limits.snapshotMaxLines + 1);
-  for (let lineIndex = lastLine; lineIndex >= firstLine; lineIndex -= 1) {
-    const line = buffer.getLine(lineIndex);
-    const text = line?.translateToString(true) ?? "";
-    const lineBytes = utf8ByteLength(text) + 2;
-    if (lines.length > 0 && bytes + lineBytes > limits.snapshotMaxBytes) break;
-    lines.push(text);
-    bytes += lineBytes;
-    includedFirstLine = lineIndex;
-  }
-
-  return {
-    content: lines.reverse().join("\r\n"),
-    captureStartLine: includedFirstLine,
-    captureEndLine: lastLine,
-  };
-}
-
-function splitOutputChunk(chunk: QueuedOutputChunk, maxBytes: number): QueuedOutputChunk[] {
-  if (chunk.bytes <= maxBytes) {
-    return [chunk, { data: "", bytes: 0 }];
-  }
-
-  if (chunk.data.length === chunk.bytes) {
-    const index = Math.max(1, Math.min(maxBytes, chunk.data.length));
-    return [
-      { data: chunk.data.slice(0, index), bytes: index },
-      { data: chunk.data.slice(index), bytes: chunk.bytes - index },
-    ];
-  }
-
-  let index = 0;
-  let bytes = 0;
-  for (let offset = 0; offset < chunk.data.length; ) {
-    const codePoint = chunk.data.codePointAt(offset) ?? 0;
-    const charLength = codePoint > 0xffff ? 2 : 1;
-    const charBytes = utf8BytesForCodePoint(codePoint);
-    if (bytes > 0 && bytes + charBytes > maxBytes) break;
-    index += charLength;
-    bytes += charBytes;
-    offset += charLength;
-    if (bytes >= maxBytes) break;
-  }
-
-  if (index <= 0) {
-    const codePoint = chunk.data.codePointAt(0) ?? 0;
-    index = codePoint > 0xffff ? 2 : 1;
-    bytes = utf8BytesForCodePoint(codePoint);
-  }
-
-  return [
-    { data: chunk.data.slice(0, index), bytes },
-    {
-      data: chunk.data.slice(index),
-      bytes: Math.max(0, chunk.bytes - bytes),
-    },
-  ];
-}
-
-function compactOutputQueue(queue: OutputQueue) {
-  if (queue.headIndex <= 1024 || queue.headIndex <= queue.chunks.length / 2) return;
-  queue.chunks = queue.chunks.slice(queue.headIndex);
-  queue.headIndex = 0;
-}
-
-function pushOutputQueue(queue: OutputQueue, chunk: QueuedOutputChunk) {
-  queue.chunks.push(chunk);
-  queue.bytes += chunk.bytes;
-}
-
-function shiftOutputQueue(queue: OutputQueue): QueuedOutputChunk | null {
-  const chunk = queue.chunks[queue.headIndex];
-  if (!chunk) return null;
-  queue.headIndex += 1;
-  queue.bytes = Math.max(0, queue.bytes - chunk.bytes);
-  compactOutputQueue(queue);
-  return chunk;
-}
-
-function peekOutputQueue(queue: OutputQueue): QueuedOutputChunk | null {
-  return queue.chunks[queue.headIndex] ?? null;
-}
-
-function replaceOutputQueueHead(queue: OutputQueue, chunk: QueuedOutputChunk) {
-  if (queue.headIndex < queue.chunks.length) {
-    queue.chunks[queue.headIndex] = chunk;
-  }
-}
-
-function hasOutputQueueItems(queue: OutputQueue) {
-  return queue.headIndex < queue.chunks.length;
-}
-
-function outputQueueToBoundedString(queue: OutputQueue) {
-  const maxBytes = XTERM_PERFORMANCE_CONFIG.lifecycle.snapshotMaxBytes;
-  const parts: string[] = [];
-  let bytes = 0;
-
-  for (let i = queue.chunks.length - 1; i >= queue.headIndex; i -= 1) {
-    const chunk = queue.chunks[i];
-    if (!chunk) continue;
-    if (bytes + chunk.bytes <= maxBytes) {
-      parts.push(chunk.data);
-      bytes += chunk.bytes;
-      continue;
-    }
-
-    const remaining = maxBytes - bytes;
-    if (remaining > 0) {
-      const [, tail] = splitOutputChunk(chunk, Math.max(0, chunk.bytes - remaining));
-      if (tail.data) parts.push(tail.data);
-    }
-    break;
-  }
-
-  return parts.reverse().join("");
-}
-
-function writeTextInFrames(terminal: Terminal, text: string): Promise<void> {
-  if (!text) return Promise.resolve();
-
-  const maxBytes = XTERM_PERFORMANCE_CONFIG.output.writeChunkBytes;
-  let remaining: QueuedOutputChunk = { data: text, bytes: utf8ByteLength(text) };
-
-  return new Promise((resolve) => {
-    const writeNext = () => {
-      if (!remaining.data) {
-        resolve();
-        return;
-      }
-
-      const [head, tail] = splitOutputChunk(remaining, maxBytes);
-      remaining = tail;
-      terminal.write(head.data, () => requestAnimationFrame(writeNext));
-    };
-
-    requestAnimationFrame(writeNext);
-  });
-}
 
 function isLocalBackspaceEvent(event: KeyboardEvent, sessionType: SessionType): boolean {
   if (sessionType !== "Local" || event.ctrlKey || event.metaKey || event.altKey) {
@@ -448,7 +205,6 @@ export default function XTerminal({
   const [terminalGeneration, setTerminalGeneration] = useState(0);
   const [hibernated, setHibernated] = useState(false);
   const [multiLinePasteText, setMultiLinePasteText] = useState<string | null>(null);
-  const [isExternalDropActive, setIsExternalDropActive] = useState(false);
   const aiCapturingRef = useRef(false);
 
   const { terminalTheme } = useTheme();
@@ -3054,80 +2810,18 @@ export default function XTerminal({
     performanceMode !== "normal" || !visible,
   );
 
-  useEffect(() => {
-    if (terminalReady && fitAddonRef.current && terminalRef.current) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
-        if (showGutter && performanceMode === "normal") {
-          window.dispatchEvent(
-            new CustomEvent("nyaterm:refresh-gutter", {
-              detail: { sessionId },
-            }),
-          );
-        }
-      });
-    }
-  }, [performanceMode, sessionId, showGutter, terminalReady]);
-
-  useEffect(() => {
-    const paddingEnabled = showContentPadding;
-    if (!terminalReady || !fitAddonRef.current || !terminalRef.current) return;
-
-    requestAnimationFrame(() => {
-      if (paddingEnabled !== (terminalSettings.show_workspace_padding ?? false)) {
-        return;
-      }
-      fitAddonRef.current?.fit();
-      terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
-    });
-  }, [showContentPadding, terminalReady, terminalSettings.show_workspace_padding]);
-
-  // Re-fit and focus when tab becomes active
-  useEffect(() => {
-    if (active && visible && terminalReady && fitAddonRef.current && terminalRef.current) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        const terminal = terminalRef.current;
-        if (!terminal) return;
-        terminal.clearTextureAtlas();
-        terminal.refresh(0, Math.max(0, terminal.rows - 1));
-        terminal.focus();
-      });
-    }
-  }, [active, terminalReady, visible]);
-
-  useEffect(() => {
-    const handleRefresh = () => {
-      if (!visible || !fitAddonRef.current || !terminalRef.current) return;
-
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
-        if (active) {
-          terminalRef.current?.focus();
-        }
-      });
-    };
-
-    window.addEventListener("nyaterm:refresh-terminals", handleRefresh);
-    return () => {
-      window.removeEventListener("nyaterm:refresh-terminals", handleRefresh);
-    };
-  }, [active, visible]);
-
-  useEffect(() => {
-    const handleClear = () => {
-      const terminal = terminalRef.current;
-      if (!active || !terminal) return;
-      sendTerminalClearInput(terminal, { focus: active });
-    };
-
-    window.addEventListener("nyaterm:clear-terminal", handleClear);
-    return () => {
-      window.removeEventListener("nyaterm:clear-terminal", handleClear);
-    };
-  }, [active]);
+  useTerminalRefreshEffects({
+    terminalRef,
+    fitAddonRef,
+    active,
+    visible,
+    terminalReady,
+    performanceMode,
+    sessionId,
+    showGutter,
+    showContentPadding,
+    workspacePaddingSetting: terminalSettings.show_workspace_padding,
+  });
 
   const doFind = useCallback(
     (selection?: string) => {
@@ -3174,82 +2868,14 @@ export default function XTerminal({
     doFindRef.current = doFind;
   }, [doFind]);
 
-  const resetExternalDropHover = useCallback(() => {
-    setIsExternalDropActive(false);
-  }, []);
-
-  const resolveLocalDropPaths = useCallback(async (paths: string[]) => {
-    const uniquePaths = Array.from(
-      new Set(paths.map((path) => path.trim()).filter((path) => !!path)),
-    );
-    if (uniquePaths.length === 0) {
-      return [];
-    }
-
-    return invoke<ResolvedLocalDropPathEntry[]>("resolve_local_drop_paths", {
-      paths: uniquePaths,
-    });
-  }, []);
-
-  const processTerminalDropPaths = useCallback(
-    async (dropPaths: string[]) => {
-      try {
-        const resolvedLocalEntries = await resolveLocalDropPaths(dropPaths);
-        if (resolvedLocalEntries.length === 0) {
-          logger.warn({
-            domain: "ui.error",
-            event: "terminal.external_drop_paths_unresolved",
-            message: "Native terminal drop did not resolve to usable local paths",
-            ids: { session_id: sessionId },
-            data: { path_count: dropPaths.length },
-          });
-          toast.error(t("terminal.dropPathsRequired"));
-          return;
-        }
-
-        await handleTerminalFileDrop({
-          sessionId,
-          sessionType,
-          entries: resolvedLocalEntries,
-          t,
-          duplicateStrategy: terminalAppSettings.transfer.duplicate_strategy,
-        });
-      } catch (error) {
-        logger.error({
-          domain: "ui.error",
-          event: "terminal.external_drop_failed",
-          message: "Failed to process terminal file drop",
-          ids: { session_id: sessionId },
-          data: { path_count: dropPaths.length },
-          error,
-        });
-        toast.error(String(error));
-      }
-    },
-    [
-      resolveLocalDropPaths,
-      sessionId,
-      sessionType,
-      t,
-      terminalAppSettings.transfer.duplicate_strategy,
-    ],
-  );
-
-  useTerminalFileDrop({
+  const { isExternalDropActive, dropOverlayCopy } = useTerminalExternalDrop({
     sessionId,
     sessionType,
-    enabled: visible,
+    visible,
     containerRef,
-    resetExternalDropHover,
-    setIsExternalDropActive,
-    processDropPaths: processTerminalDropPaths,
-    externalDropPathsRequiredMessage: t("terminal.dropPathsRequired"),
+    t,
+    duplicateStrategy: terminalAppSettings.transfer.duplicate_strategy,
   });
-
-  const dropOverlayCopy = useMemo(
-    () => getTerminalDropOverlayCopy(sessionType, t),
-    [sessionType, t],
-  );
 
   const terminalBackground = "var(--df-terminal-bg, var(--df-bg-terminal))";
 
