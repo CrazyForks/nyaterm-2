@@ -1,12 +1,14 @@
-import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
 import { type RefObject, useEffect } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { logger } from "@/lib/logger";
 import { sendTerminalClearInput } from "@/lib/terminalControlInput";
+import type { TerminalFitScheduler } from "./terminalFitScheduler";
 import type { PerformanceMode } from "./xterminalTypes";
 
 interface UseTerminalRefreshEffectsParams {
   terminalRef: RefObject<Terminal | null>;
-  fitAddonRef: RefObject<FitAddon | null>;
+  fitSchedulerRef: RefObject<TerminalFitScheduler | null>;
   active: boolean;
   visible: boolean;
   terminalReady: boolean;
@@ -19,7 +21,7 @@ interface UseTerminalRefreshEffectsParams {
 
 export function useTerminalRefreshEffects({
   terminalRef,
-  fitAddonRef,
+  fitSchedulerRef,
   active,
   visible,
   terminalReady,
@@ -30,10 +32,37 @@ export function useTerminalRefreshEffects({
   workspacePaddingSetting,
 }: UseTerminalRefreshEffectsParams) {
   useEffect(() => {
-    if (terminalReady && fitAddonRef.current && terminalRef.current) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
+    if (terminalReady && fitSchedulerRef.current && terminalRef.current) {
+      fitSchedulerRef.current.schedule({
+        reason: "ready",
+        force: true,
+        refresh: true,
+        onComplete: () => {
+          if (!terminalRef.current) return;
+          if (showGutter && performanceMode === "normal") {
+            window.dispatchEvent(
+              new CustomEvent("nyaterm:refresh-gutter", {
+                detail: { sessionId },
+              }),
+            );
+          }
+        },
+      });
+    }
+  }, [fitSchedulerRef, performanceMode, sessionId, showGutter, terminalReady, terminalRef]);
+
+  useEffect(() => {
+    const paddingEnabled = showContentPadding;
+    if (!terminalReady || !fitSchedulerRef.current || !terminalRef.current) return;
+
+    fitSchedulerRef.current.schedule({
+      reason: "padding",
+      force: true,
+      refresh: true,
+      onComplete: () => {
+        if (paddingEnabled !== (workspacePaddingSetting ?? false)) {
+          return;
+        }
         if (showGutter && performanceMode === "normal") {
           window.dispatchEvent(
             new CustomEvent("nyaterm:refresh-gutter", {
@@ -41,46 +70,40 @@ export function useTerminalRefreshEffects({
             }),
           );
         }
-      });
-    }
-  }, [fitAddonRef, performanceMode, sessionId, showGutter, terminalReady, terminalRef]);
-
-  useEffect(() => {
-    const paddingEnabled = showContentPadding;
-    if (!terminalReady || !fitAddonRef.current || !terminalRef.current) return;
-
-    requestAnimationFrame(() => {
-      if (paddingEnabled !== (workspacePaddingSetting ?? false)) {
-        return;
-      }
-      fitAddonRef.current?.fit();
-      terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
+      },
     });
-  }, [fitAddonRef, showContentPadding, terminalReady, terminalRef, workspacePaddingSetting]);
+  }, [
+    fitSchedulerRef,
+    performanceMode,
+    sessionId,
+    showContentPadding,
+    showGutter,
+    terminalReady,
+    terminalRef,
+    workspacePaddingSetting,
+  ]);
 
   useEffect(() => {
-    if (active && visible && terminalReady && fitAddonRef.current && terminalRef.current) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        const terminal = terminalRef.current;
-        if (!terminal) return;
-        terminal.clearTextureAtlas();
-        terminal.refresh(0, Math.max(0, terminal.rows - 1));
-        terminal.focus();
+    if (active && visible && terminalReady && fitSchedulerRef.current && terminalRef.current) {
+      fitSchedulerRef.current.schedule({
+        reason: "active",
+        force: true,
+        refresh: true,
+        clearTextureAtlas: true,
+        focus: true,
       });
     }
-  }, [active, fitAddonRef, terminalReady, terminalRef, visible]);
+  }, [active, fitSchedulerRef, terminalReady, terminalRef, visible]);
 
   useEffect(() => {
     const handleRefresh = () => {
-      if (!visible || !fitAddonRef.current || !terminalRef.current) return;
+      if (!visible || !fitSchedulerRef.current || !terminalRef.current) return;
 
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
-        if (active) {
-          terminalRef.current?.focus();
-        }
+      fitSchedulerRef.current.schedule({
+        reason: "global-refresh",
+        force: true,
+        refresh: true,
+        focus: active,
       });
     };
 
@@ -88,7 +111,113 @@ export function useTerminalRefreshEffects({
     return () => {
       window.removeEventListener("nyaterm:refresh-terminals", handleRefresh);
     };
-  }, [active, fitAddonRef, terminalRef, visible]);
+  }, [active, fitSchedulerRef, terminalRef, visible]);
+
+  useEffect(() => {
+    if (!terminalReady) return;
+
+    let disposed = false;
+    let unlistenResized: (() => void) | undefined;
+    let unlistenMoved: (() => void) | undefined;
+    let unlistenFocused: (() => void) | undefined;
+    let unlistenScale: (() => void) | undefined;
+    let resolutionQuery: MediaQueryList | null = null;
+    let lastDevicePixelRatio = window.devicePixelRatio || 1;
+
+    const scheduleWindowFit = (
+      reason: "window-resized" | "window-moved" | "window-focus" | "scale-factor",
+      force = false,
+      scaleFactor?: number,
+    ) => {
+      const nextDevicePixelRatio = window.devicePixelRatio || 1;
+      const dprChanged = Math.abs(nextDevicePixelRatio - lastDevicePixelRatio) > 0.001;
+      if (dprChanged) {
+        lastDevicePixelRatio = nextDevicePixelRatio;
+      }
+
+      const isScaleChange = reason === "scale-factor" || dprChanged;
+      if (isScaleChange) {
+        logger.debug({
+          domain: "terminal.resize",
+          event: "terminal.resize.scale_factor_changed",
+          message: "Terminal scale factor changed",
+          ids: { session_id: sessionId },
+          data: {
+            reason,
+            device_pixel_ratio: nextDevicePixelRatio,
+            tauri_scale_factor: scaleFactor,
+          },
+        });
+      }
+
+      if (!visible && !isScaleChange) return;
+      if (!fitSchedulerRef.current || !terminalRef.current) return;
+      fitSchedulerRef.current.schedule({
+        reason: isScaleChange ? "scale-factor" : reason,
+        force: force || isScaleChange,
+        refresh: true,
+        clearTextureAtlas: isScaleChange,
+        focus: active && visible,
+      });
+    };
+
+    const installResolutionListener = () => {
+      resolutionQuery?.removeEventListener("change", handleResolutionChange);
+      resolutionQuery = window.matchMedia(`(resolution: ${lastDevicePixelRatio}dppx)`);
+      resolutionQuery.addEventListener("change", handleResolutionChange);
+    };
+
+    const handleResolutionChange = () => {
+      if (disposed) return;
+      scheduleWindowFit("scale-factor", true);
+      installResolutionListener();
+    };
+
+    installResolutionListener();
+
+    const appWindow = getCurrentWindow();
+    appWindow
+      .onResized(() => {
+        if (!disposed) scheduleWindowFit("window-resized");
+      })
+      .then((unlisten) => {
+        unlistenResized = unlisten;
+      })
+      .catch(() => {});
+    appWindow
+      .onMoved(() => {
+        if (!disposed) scheduleWindowFit("window-moved");
+      })
+      .then((unlisten) => {
+        unlistenMoved = unlisten;
+      })
+      .catch(() => {});
+    appWindow
+      .onFocusChanged(({ payload }) => {
+        if (!disposed && payload) scheduleWindowFit("window-focus");
+      })
+      .then((unlisten) => {
+        unlistenFocused = unlisten;
+      })
+      .catch(() => {});
+    appWindow
+      .onScaleChanged(({ payload }) => {
+        if (!disposed) scheduleWindowFit("scale-factor", true, payload.scaleFactor);
+      })
+      .then((unlisten) => {
+        unlistenScale = unlisten;
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      resolutionQuery?.removeEventListener("change", handleResolutionChange);
+      unlistenResized?.();
+      unlistenMoved?.();
+      unlistenFocused?.();
+      unlistenScale?.();
+    };
+  }, [active, fitSchedulerRef, sessionId, terminalReady, terminalRef, visible]);
 
   useEffect(() => {
     const handleClear = () => {
