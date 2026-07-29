@@ -3150,9 +3150,14 @@ export default function XTerminal({
     workspacePaddingSetting: terminalSettings.show_workspace_padding,
   });
 
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
   const doFind = useCallback(
     (selection?: string) => {
       setShowSearchBar(true);
+      // When the bar is already open the focus effect won't rerun, so focus directly.
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
       if (selection) {
         setSearchQuery(selection);
         handleSearchNext(selection);
@@ -3292,6 +3297,7 @@ export default function XTerminal({
 
         <TerminalSearchBar
           show={showSearchBar}
+          inputRef={searchInputRef}
           searchQuery={searchQuery}
           searchState={searchState}
           searchFlags={searchFlags}
