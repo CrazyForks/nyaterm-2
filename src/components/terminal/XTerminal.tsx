@@ -172,6 +172,11 @@ type PendingWakeEvent =
   | { type: "zmodem"; payload: ZmodemEventPayload }
   | { type: "ai"; payload: AiCaptureEvent };
 
+type SearchAddonWithLifecycle = SearchAddon & {
+  onBeforeSearch?: (listener: () => void) => { dispose: () => void };
+  onAfterSearch?: (listener: () => void) => { dispose: () => void };
+};
+
 type HibernationPhase = "idle" | "preparing" | "detached" | "hibernated" | "waking" | "failed";
 type HibernationLogEvent =
   | "scheduled"
@@ -252,6 +257,8 @@ export default function XTerminal({
   const tRef = useRef(t);
   const doFindRef = useRef<(selection?: string) => void>(() => {});
   const pasteTextRef = useRef<(text: string, options?: { skipDialog?: boolean }) => void>(() => {});
+  const pendingSearchSelectionRef = useRef(false);
+  const searchSelectionTextRef = useRef<string | null>(null);
   const disconnectedRef = useRef(false);
   const disconnectedNoticeShownRef = useRef(false);
   const disconnectedCloseRequestedRef = useRef(false);
@@ -296,6 +303,11 @@ export default function XTerminal({
   const credentialPromptBufferRef = useRef("");
   const credentialPromptInputUntilRef = useRef(0);
   const commandSuggestionSuppressedRef = useRef(false);
+
+  const clearSearchSelectionState = useCallback(() => {
+    pendingSearchSelectionRef.current = false;
+    searchSelectionTextRef.current = null;
+  }, []);
 
   const logHibernation = useCallback(
     (
@@ -723,7 +735,18 @@ export default function XTerminal({
     } = createTerminalLinkHandlers(terminal, tRef);
     const searchAddon = new SearchAddon({
       highlightLimit: TERMINAL_SEARCH_VISIBLE_MATCH_LIMIT,
-    });
+    }) as SearchAddonWithLifecycle;
+    const searchLifecycleDisposables = [
+      searchAddon.onBeforeSearch?.(() => {
+        pendingSearchSelectionRef.current = true;
+        searchSelectionTextRef.current = null;
+      }),
+      searchAddon.onAfterSearch?.(() => {
+        window.setTimeout(() => {
+          pendingSearchSelectionRef.current = false;
+        }, 0);
+      }),
+    ].filter((disposable): disposable is { dispose: () => void } => Boolean(disposable));
     const serializeAddon = new SerializeAddon();
     const unicodeGraphemesAddon = new UnicodeGraphemesAddon();
     const zmodemHandler = createZmodemEventHandler(
@@ -970,6 +993,22 @@ export default function XTerminal({
       return !/[\x00-\x1f\x7f]/u.test(data);
     };
 
+    const isCurrentSelectionFromSearch = () => {
+      const searchSelectionText = searchSelectionTextRef.current;
+      return (
+        searchSelectionText !== null &&
+        terminal.hasSelection() &&
+        terminal.getSelection() === searchSelectionText
+      );
+    };
+
+    const clearSearchSelectionBeforeInput = () => {
+      if (!isCurrentSelectionFromSearch()) return false;
+      terminal.clearSelection();
+      clearSearchSelectionState();
+      return true;
+    };
+
     const pasteText = (text: string, options: { skipDialog?: boolean } = {}) => {
       if (!text) return;
       terminal.focus();
@@ -985,6 +1024,7 @@ export default function XTerminal({
         return;
       }
 
+      clearSearchSelectionBeforeInput();
       const selectedInputRange = getSmartCursorSelectedInputRange();
       let pendingSelectionDelete: Promise<void> | null = null;
       if (selectedInputRange) {
@@ -1026,6 +1066,9 @@ export default function XTerminal({
       primaryMouseDown = null;
       if (options.clearSelection && isTerminalAlive()) {
         terminal.clearSelection();
+      }
+      if (options.clearSelection) {
+        clearSearchSelectionState();
       }
     };
 
@@ -1257,6 +1300,7 @@ export default function XTerminal({
           return false;
         }
 
+        clearSearchSelectionBeforeInput();
         const selectedInputRange = getSmartCursorSelectedInputRange();
         if (selectedInputRange) {
           deleteInputSelection(selectedInputRange);
@@ -1277,6 +1321,9 @@ export default function XTerminal({
         !e.altKey &&
         !e.shiftKey
       ) {
+        if (clearSearchSelectionBeforeInput()) {
+          return true;
+        }
         const selectedInputRange = getSmartCursorSelectedInputRange();
         if (selectedInputRange) {
           e.preventDefault();
@@ -1286,6 +1333,9 @@ export default function XTerminal({
       }
 
       if ((e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (clearSearchSelectionBeforeInput()) {
+          return true;
+        }
         const selectedInputRange = getSmartCursorSelectedInputRange();
         if (selectedInputRange) {
           e.preventDefault();
@@ -1296,6 +1346,9 @@ export default function XTerminal({
 
       const directInputData = getDirectInputDataFromKeyEvent(e);
       if (directInputData) {
+        if (clearSearchSelectionBeforeInput()) {
+          return true;
+        }
         const selectedInputRange = getSmartCursorSelectedInputRange();
         if (selectedInputRange) {
           e.preventDefault();
@@ -2667,6 +2720,7 @@ export default function XTerminal({
       }
 
       if (isPlainTextInputData(data)) {
+        clearSearchSelectionBeforeInput();
         const selectedInputRange = getSmartCursorSelectedInputRange();
         if (selectedInputRange) {
           replaceInputSelection(selectedInputRange, data);
@@ -2717,11 +2771,22 @@ export default function XTerminal({
 
     const selectionDisposable = terminal.onSelectionChange(() => {
       const text = terminal.getSelection();
+      if (!text) {
+        if (!pendingSearchSelectionRef.current) {
+          searchSelectionTextRef.current = null;
+        }
+        return;
+      }
+
+      if (pendingSearchSelectionRef.current) {
+        searchSelectionTextRef.current = text;
+      }
+
       if (text) {
         lastSelection = text;
       }
       if (terminalAppSettingsRef.current?.interaction?.copy_on_select) {
-        if (text) {
+        if (searchSelectionTextRef.current !== text) {
           writeClipboardText(text).catch(() => {});
         }
       }
@@ -2729,6 +2794,7 @@ export default function XTerminal({
 
     const handleTerminalMouseDown = (e: MouseEvent) => {
       removeLinkPopup();
+      clearSearchSelectionState();
 
       if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         primaryMouseDown = { x: e.clientX, y: e.clientY };
@@ -2784,7 +2850,8 @@ export default function XTerminal({
 
         if (terminalAppSettingsRef.current?.interaction?.copy_on_select) {
           const sel = terminal.getSelection();
-          if (sel) writeClipboardText(sel).catch(() => {});
+          if (sel && searchSelectionTextRef.current !== sel)
+            writeClipboardText(sel).catch(() => {});
         }
         return;
       }
@@ -2930,6 +2997,9 @@ export default function XTerminal({
       resizeDisposable.dispose();
       scrollDisposable.dispose();
       selectionDisposable.dispose();
+      for (const disposable of searchLifecycleDisposables) {
+        disposable.dispose();
+      }
       trimDisposable?.dispose();
       removeLinkPopup();
       removePreviewListener();
@@ -3037,6 +3107,39 @@ export default function XTerminal({
     [handleSearchNext, setShowSearchBar, setSearchQuery],
   );
 
+  const handleTerminalSearchQueryChange = useCallback(
+    (query: string) => {
+      if (!query) {
+        clearSearchSelectionState();
+      }
+      setSearchQuery(query);
+    },
+    [clearSearchSelectionState, setSearchQuery],
+  );
+
+  const handleTerminalSearchModeChange = useCallback(
+    (mode: "buffer" | "history") => {
+      if (mode === "history") {
+        clearSearchSelectionState();
+      }
+      setActiveMode(mode);
+    },
+    [clearSearchSelectionState, setActiveMode],
+  );
+
+  const handleTerminalSearchFlagChange = useCallback(
+    (flag: keyof typeof searchFlags, value: boolean) => {
+      clearSearchSelectionState();
+      setSearchFlag(flag, value);
+    },
+    [clearSearchSelectionState, setSearchFlag],
+  );
+
+  const handleTerminalSearchClose = useCallback(() => {
+    clearSearchSelectionState();
+    handleCloseSearch();
+  }, [clearSearchSelectionState, handleCloseSearch]);
+
   const handlePasteText = useCallback((text: string) => {
     pasteTextRef.current(text);
   }, []);
@@ -3140,12 +3243,12 @@ export default function XTerminal({
           searchFlags={searchFlags}
           activeMode={activeMode}
           historyState={historyState}
-          setSearchQuery={setSearchQuery}
-          onModeChange={setActiveMode}
-          onSearchFlagChange={setSearchFlag}
+          setSearchQuery={handleTerminalSearchQueryChange}
+          onModeChange={handleTerminalSearchModeChange}
+          onSearchFlagChange={handleTerminalSearchFlagChange}
           onNext={handleSearchNext}
           onPrev={handleSearchPrev}
-          onClose={handleCloseSearch}
+          onClose={handleTerminalSearchClose}
         />
 
         <CommandSuggestions
