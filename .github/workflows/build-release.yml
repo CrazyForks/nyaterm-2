@@ -186,7 +186,7 @@ jobs:
           const keyPath = path.join(runnerTemp, 'tauri-updater.key');
 
           fs.writeFileSync(keyPath, Buffer.from(keyB64, 'base64'));
-          fs.appendFileSync(process.env.GITHUB_ENV, `TAURI_SIGNING_PRIVATE_KEY=${keyPath}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `TAURI_SIGNING_PRIVATE_KEY_PATH=${keyPath}\n`);
 
           console.log(`Tauri updater signing key prepared at: ${keyPath}`);
           NODE
@@ -261,7 +261,7 @@ jobs:
           New-Item -ItemType File -Path (Join-Path $dataDir ".keep") -Force | Out-Null
 
           Compress-Archive -Path $portableDir -DestinationPath $assetPath -Force
-          pnpm tauri signer sign --private-key-path "$env:TAURI_SIGNING_PRIVATE_KEY" "$assetPath"
+          pnpm tauri signer sign --private-key-path "$env:TAURI_SIGNING_PRIVATE_KEY_PATH" --password "$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$assetPath"
 
           $signaturePath = "$assetPath.sig"
           if (-not (Test-Path $signaturePath)) {
