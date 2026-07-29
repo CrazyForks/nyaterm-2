@@ -11,6 +11,7 @@ type LogDomain =
   | "window.lifecycle"
   | "settings.persistence"
   | "terminal.input"
+  | "terminal.resize"
   | "session.lifecycle"
   | "ssh.auth"
   | "transfer.lifecycle"

@@ -85,6 +85,12 @@ import TerminalContextMenu from "./TerminalContextMenu";
 import TerminalGutter from "./TerminalGutter";
 import TerminalSearchBar from "./TerminalSearchBar";
 import {
+  createTerminalFitScheduler,
+  TerminalResizeDeduper,
+  type TerminalFitResult,
+  type TerminalFitScheduler,
+} from "./terminalFitScheduler";
+import {
   getInputIndexAtBufferPosition,
   getMouseBufferPosition,
   getSelectedInputRange,
@@ -215,6 +221,8 @@ export default function XTerminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const fitSchedulerRef = useRef<TerminalFitScheduler | null>(null);
+  const resizeDeduperRef = useRef(new TerminalResizeDeduper());
   const [terminalInstance, setTerminalInstance] = useState<Terminal | null>(null);
   const [terminalReady, setTerminalReady] = useState(false);
   const [performanceMode, setPerformanceMode] = useState<PerformanceMode>("normal");
@@ -682,6 +690,8 @@ export default function XTerminal({
   // biome-ignore lint/correctness/useExhaustiveDependencies: terminal lifecycle is intentionally scoped to session changes.
   useEffect(() => {
     if (hibernated) {
+      fitSchedulerRef.current?.dispose();
+      fitSchedulerRef.current = null;
       setTerminalReady(false);
       terminalRef.current = null;
       setTerminalInstance(null);
@@ -1708,6 +1718,48 @@ export default function XTerminal({
       const terminalSettings = terminalAppSettingsRef.current?.terminal;
       if (!terminalSettings?.show_line_numbers && !terminalSettings?.show_timestamps) return;
       window.dispatchEvent(new CustomEvent("nyaterm:refresh-gutter", { detail: { sessionId } }));
+    };
+
+    resizeDeduperRef.current.reset(sessionId, terminalGeneration);
+    const sendBackendResize = (cols: number, rows: number, source: string) => {
+      if (resizeDeduperRef.current.shouldSend(sessionId, terminalGeneration, cols, rows)) {
+        logger.debug({
+          domain: "terminal.resize",
+          event: "terminal.resize.backend_sent",
+          message: "Sent terminal resize to backend",
+          ids: { session_id: sessionId },
+          data: { cols, rows, source },
+        });
+        invoke("resize_session", { sessionId, cols, rows }).catch(() => {});
+        return;
+      }
+
+      logger.debug({
+        domain: "terminal.resize",
+        event: "terminal.resize.backend_skipped",
+        message: "Skipped duplicate terminal resize to backend",
+        ids: { session_id: sessionId },
+        data: { cols, rows, source },
+      });
+    };
+
+    const handleFitComplete = (result: TerminalFitResult) => {
+      if (!isTerminalAlive()) return;
+      sendBackendResize(terminal.cols, terminal.rows, result.reason);
+      refreshGutter();
+    };
+
+    const fitScheduler = createTerminalFitScheduler({
+      sessionId,
+      getTerminal: () => (isTerminalAlive() ? terminal : null),
+      getFitAddon: () => fitAddonRef.current,
+      getContainer: () => containerRef.current,
+      isVisible: () => visibleRef.current && !hibernatedRef.current,
+      onAfterFit: handleFitComplete,
+    });
+    fitSchedulerRef.current = fitScheduler;
+    handleVisibilityChangeRef.current = () => {
+      fitScheduler.notifyVisible();
     };
 
     const stampWrittenLines = (from: number, to: number, ts: number) => {
@@ -2751,7 +2803,7 @@ export default function XTerminal({
     });
 
     const resizeDisposable = terminal.onResize(({ cols, rows }) => {
-      invoke("resize_session", { sessionId, cols, rows }).catch(() => {});
+      sendBackendResize(cols, rows, "xterm.onResize");
       refreshGutter();
     });
 
@@ -2762,10 +2814,8 @@ export default function XTerminal({
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
-      if (!entry || entry.contentRect.width === 0 || entry.contentRect.height === 0) return;
-      requestAnimationFrame(() => {
-        fitAddon.fit();
-      });
+      if (!entry) return;
+      fitScheduler.observeResize(entry.contentRect.width, entry.contentRect.height);
     });
     observer.observe(containerRef.current);
 
@@ -2925,15 +2975,15 @@ export default function XTerminal({
     document.addEventListener("visibilitychange", handleTerminalVisibilityChange);
     const containerEl = containerRef.current;
 
-    requestAnimationFrame(() => {
-      if (!isTerminalAlive()) return;
-      fitAddon.fit();
-      requestAnimationFrame(() => {
+    fitScheduler.schedule({
+      reason: "initial",
+      force: true,
+      refresh: true,
+      onComplete: () => {
         if (!isTerminalAlive()) return;
-        terminal.refresh(0, Math.max(0, terminal.rows - 1));
         setTerminalReady(true);
         refreshGutter();
-      });
+      },
     });
 
     return () => {
@@ -3007,6 +3057,10 @@ export default function XTerminal({
       unregisterReconnectCapture();
 
       observer.disconnect();
+      fitScheduler.dispose();
+      if (fitSchedulerRef.current === fitScheduler) {
+        fitSchedulerRef.current = null;
+      }
       if (outputUnlisten) outputUnlisten();
       if (errorUnlisten) errorUnlisten();
       if (closedUnlisten) closedUnlisten();
@@ -3054,7 +3108,7 @@ export default function XTerminal({
   // run after terminalRef.current is already set on initial mount.
   useTerminalSettings(
     terminalRef,
-    fitAddonRef,
+    fitSchedulerRef,
     terminalThemeColors,
     appearance,
     terminalSettings,
@@ -3085,7 +3139,7 @@ export default function XTerminal({
 
   useTerminalRefreshEffects({
     terminalRef,
-    fitAddonRef,
+    fitSchedulerRef,
     active,
     visible,
     terminalReady,

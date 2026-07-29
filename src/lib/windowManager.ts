@@ -1,7 +1,10 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
+  availableMonitors,
   getCurrentWindow,
+  PhysicalPosition,
+  primaryMonitor,
   type Window as TauriWindow,
   UserAttentionType,
 } from "@tauri-apps/api/window";
@@ -77,6 +80,18 @@ interface ChildWindowReadyWaiter {
 interface PendingChildWindowOpen {
   url: string;
   promise: Promise<WebviewWindow>;
+}
+
+interface WorkAreaLike {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+}
+
+interface WindowRectLike {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export function isMainWindowLabel(label: string) {
@@ -176,6 +191,86 @@ function shouldWarnPendingOpenConflict(existingUrl: string, requestedUrl: string
 
 async function getMainWindow() {
   return (await WebviewWindow.getByLabel(ownerMainWindowLabel)) ?? getCurrentWindow();
+}
+
+export function rectOverlapsWorkArea(rect: WindowRectLike, workArea: WorkAreaLike) {
+  const windowRight = rect.x + rect.width;
+  const windowBottom = rect.y + rect.height;
+  const areaRight = workArea.position.x + workArea.size.width;
+  const areaBottom = workArea.position.y + workArea.size.height;
+
+  return (
+    rect.x < areaRight &&
+    windowRight > workArea.position.x &&
+    rect.y < areaBottom &&
+    windowBottom > workArea.position.y
+  );
+}
+
+export function centerWindowRectInWorkArea(
+  size: Pick<WindowRectLike, "width" | "height">,
+  workArea: WorkAreaLike,
+) {
+  return {
+    x: workArea.position.x + Math.max(0, Math.round((workArea.size.width - size.width) / 2)),
+    y: workArea.position.y + Math.max(0, Math.round((workArea.size.height - size.height) / 2)),
+  };
+}
+
+function findMonitorForRect<T extends { workArea: WorkAreaLike }>(
+  rect: WindowRectLike,
+  monitors: T[],
+) {
+  return monitors.find((monitor) => rectOverlapsWorkArea(rect, monitor.workArea)) ?? null;
+}
+
+async function getWindowRect(win: TauriWindow): Promise<WindowRectLike> {
+  const [position, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
+  return {
+    x: position.x,
+    y: position.y,
+    width: size.width,
+    height: size.height,
+  };
+}
+
+async function ensureChildWindowVisible(win: WebviewWindow, opts: ChildWindowOptions) {
+  try {
+    const [childRect, monitors] = await Promise.all([getWindowRect(win), availableMonitors()]);
+    if (monitors.length === 0) return;
+    if (findMonitorForRect(childRect, monitors)) return;
+
+    const parentWindow = await getMainWindow();
+    const parentRect = await getWindowRect(parentWindow).catch(() => null);
+    const parentMonitor = parentRect ? findMonitorForRect(parentRect, monitors) : null;
+    const fallbackMonitor = await primaryMonitor().catch(() => null);
+    const targetMonitor = parentMonitor ?? fallbackMonitor ?? monitors[0];
+    const nextPosition = centerWindowRectInWorkArea(childRect, targetMonitor.workArea);
+
+    await win.setPosition(new PhysicalPosition(nextPosition.x, nextPosition.y));
+    logger.warn({
+      domain: "window.lifecycle",
+      event: "window.child.repositioned_from_disconnected_monitor",
+      message: "Repositioned child window from disconnected monitor",
+      data: {
+        label: opts.label,
+        from_x: childRect.x,
+        from_y: childRect.y,
+        width: childRect.width,
+        height: childRect.height,
+        to_x: nextPosition.x,
+        to_y: nextPosition.y,
+      },
+    });
+  } catch (error) {
+    logger.warn({
+      domain: "window.lifecycle",
+      event: "child_window_visibility_check_failed",
+      message: "Failed to verify child window visibility",
+      data: { label: opts.label },
+      error,
+    });
+  }
 }
 
 async function getOpenModalChildWindows() {
@@ -379,6 +474,7 @@ async function revealChildWindow(win: WebviewWindow, opts: ChildWindowOptions, i
   await win.setTitle(opts.title).catch(() => {});
   await win.setAlwaysOnTop(needsAlwaysOnTop(opts.label)).catch(() => {});
   attachChildWindowDestroyedHandler(opts.label, win);
+  await ensureChildWindowVisible(win, opts);
   await win.show().catch(() => {});
   await win.setFocus().catch(() => {});
   emit("child-window-opened", { label: opts.label });
