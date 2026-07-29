@@ -172,6 +172,17 @@ type PendingWakeEvent =
   | { type: "zmodem"; payload: ZmodemEventPayload }
   | { type: "ai"; payload: AiCaptureEvent };
 
+type HibernationPhase = "idle" | "preparing" | "detached" | "hibernated" | "waking" | "failed";
+type HibernationLogEvent =
+  | "scheduled"
+  | "start"
+  | "detached"
+  | "success"
+  | "wake"
+  | "rollback"
+  | "fail"
+  | "cancel";
+
 function isLocalBackspaceEvent(event: KeyboardEvent, sessionType: SessionType): boolean {
   if (sessionType !== "Local" || event.ctrlKey || event.metaKey || event.altKey) {
     return false;
@@ -250,6 +261,10 @@ export default function XTerminal({
   const hibernateTimerRef = useRef<number | null>(null);
   const hibernationCleanupRef = useRef(false);
   const hibernationPendingRef = useRef(false);
+  const hibernationPhaseRef = useRef<HibernationPhase>("idle");
+  const hibernationEpochRef = useRef(0);
+  const detachedHibernateEpochRef = useRef<number | null>(null);
+  const hibernatedRef = useRef(hibernated);
   const pendingWakeEventsRef = useRef<PendingWakeEvent[]>([]);
   const zmodemActiveRef = useRef(false);
   const outputWriteQueueRef = useRef(Promise.resolve());
@@ -281,6 +296,67 @@ export default function XTerminal({
   const credentialPromptBufferRef = useRef("");
   const credentialPromptInputUntilRef = useRef(0);
   const commandSuggestionSuppressedRef = useRef(false);
+
+  const logHibernation = useCallback(
+    (
+      event: HibernationLogEvent,
+      message: string,
+      data: Record<string, unknown> = {},
+      error?: unknown,
+    ) => {
+      logger.debug({
+        domain: "terminal.input",
+        event: `terminal.hibernate.${event}`,
+        message,
+        ids: { session_id: sessionIdRef.current },
+        data: {
+          session_type: sessionTypeRef.current,
+          phase: hibernationPhaseRef.current,
+          epoch: hibernationEpochRef.current,
+          ...data,
+        },
+        error,
+      });
+    },
+    [],
+  );
+
+  const clearHibernateTimer = useCallback(() => {
+    if (hibernateTimerRef.current !== null) {
+      window.clearTimeout(hibernateTimerRef.current);
+      hibernateTimerRef.current = null;
+    }
+  }, []);
+
+  const invalidateHibernation = useCallback(
+    (reason: string) => {
+      clearHibernateTimer();
+      hibernationEpochRef.current += 1;
+      if (hibernationPhaseRef.current !== "idle") {
+        logHibernation("cancel", "Cancelled terminal hibernation", { reason });
+      }
+    },
+    [clearHibernateTimer, logHibernation],
+  );
+
+  const requestWake = useCallback(
+    (reason: string) => {
+      clearHibernateTimer();
+      hibernationEpochRef.current += 1;
+
+      if (hibernationPhaseRef.current !== "idle") {
+        hibernationPhaseRef.current = "waking";
+        logHibernation("wake", "Waking hibernated terminal renderer", { reason });
+      }
+
+      if (hibernatedRef.current) {
+        hibernatedRef.current = false;
+        setHibernated(false);
+        setTerminalGeneration((generation) => generation + 1);
+      }
+    },
+    [clearHibernateTimer, logHibernation],
+  );
 
   const pasteClipboard = useCallback(async () => {
     const pasteImageAsPathEnabled =
@@ -355,13 +431,16 @@ export default function XTerminal({
   }, [sessionId]);
 
   useEffect(() => {
+    hibernatedRef.current = hibernated;
+  }, [hibernated]);
+
+  useEffect(() => {
     visibleRef.current = visible;
-    if (visible && hibernated) {
-      setHibernated(false);
-      setTerminalGeneration((generation) => generation + 1);
+    if (visible) {
+      requestWake("visible");
     }
     handleVisibilityChangeRef.current?.();
-  }, [hibernated, visible]);
+  }, [requestWake, visible]);
 
   useEffect(() => {
     if (!hibernated) return;
@@ -371,8 +450,7 @@ export default function XTerminal({
     const wake = (event: PendingWakeEvent) => {
       pendingWakeEventsRef.current.push(event);
       if (disposed) return;
-      setHibernated(false);
-      setTerminalGeneration((generation) => generation + 1);
+      requestWake(event.type);
     };
 
     const setupWakeListeners = async () => {
@@ -414,7 +492,37 @@ export default function XTerminal({
         unlisten();
       }
     };
-  }, [hibernated, sessionId]);
+  }, [hibernated, requestWake, sessionId]);
+
+  useEffect(() => {
+    return () => {
+      clearHibernateTimer();
+      hibernationEpochRef.current += 1;
+      const detachedEpoch = detachedHibernateEpochRef.current;
+      if (detachedEpoch === null) return;
+
+      void invoke("attach_session", { sessionId: sessionIdRef.current })
+        .then(() => {
+          if (detachedHibernateEpochRef.current === detachedEpoch) {
+            detachedHibernateEpochRef.current = null;
+          }
+          hibernationPhaseRef.current = "idle";
+          logHibernation("rollback", "Rolled back detached renderer on component unmount", {
+            reason: "unmount",
+            epoch: detachedEpoch,
+          });
+        })
+        .catch((error) => {
+          hibernationPhaseRef.current = "failed";
+          logHibernation(
+            "fail",
+            "Failed to roll back detached renderer on component unmount",
+            { reason: "unmount", epoch: detachedEpoch },
+            error,
+          );
+        });
+    };
+  }, [clearHibernateTimer, logHibernation]);
 
   useEffect(() => {
     terminalAppSettingsRef.current = terminalAppSettings;
@@ -2025,13 +2133,6 @@ export default function XTerminal({
       });
     };
 
-    const clearHibernateTimer = () => {
-      if (hibernateTimerRef.current !== null) {
-        window.clearTimeout(hibernateTimerRef.current);
-        hibernateTimerRef.current = null;
-      }
-    };
-
     const replayPendingWakeEvents = () => {
       const events = pendingWakeEventsRef.current.splice(0);
       for (const event of events) {
@@ -2083,10 +2184,13 @@ export default function XTerminal({
     };
 
     const canHibernateRenderer = (options: { allowPending?: boolean } = {}) => {
+      const phase = hibernationPhaseRef.current;
       if (
         !isTerminalAlive() ||
         visibleRef.current ||
-        (!options.allowPending && hibernationPendingRef.current)
+        (!options.allowPending && hibernationPendingRef.current) ||
+        (phase !== "idle" &&
+          !(options.allowPending && (phase === "preparing" || phase === "detached")))
       ) {
         return false;
       }
@@ -2101,50 +2205,93 @@ export default function XTerminal({
       return true;
     };
 
-    const hibernateRenderer = async () => {
-      clearHibernateTimer();
-      if (!canHibernateRenderer()) return;
+    const restoreDetachedRenderer = async (epoch: number, reason: string) => {
+      if (detachedHibernateEpochRef.current !== epoch) return;
+      try {
+        await invoke("attach_session", { sessionId });
+        detachedHibernateEpochRef.current = null;
+        hibernationPhaseRef.current = "idle";
+        logHibernation("rollback", "Rolled back detached terminal renderer", { reason, epoch });
+      } catch (error) {
+        hibernationPhaseRef.current = "failed";
+        logHibernation(
+          "fail",
+          "Failed to roll back detached terminal renderer",
+          { reason, epoch },
+          error,
+        );
+      }
+    };
 
+    const hibernateRenderer = async (epoch: number) => {
+      clearHibernateTimer();
+      if (epoch !== hibernationEpochRef.current) return;
+      if (!canHibernateRenderer()) {
+        hibernationPhaseRef.current = "idle";
+        logHibernation("cancel", "Skipped terminal hibernation after eligibility check", { epoch });
+        return;
+      }
+
+      hibernationPhaseRef.current = "preparing";
       hibernationPendingRef.current = true;
-      let rendererDetached = false;
-      const restoreDetachedRenderer = async () => {
-        if (!rendererDetached) return;
-        rendererDetached = false;
-        try {
-          await invoke("attach_session", { sessionId });
-        } catch {
-          // The session may be closing; the normal close/error listeners handle that path.
-        }
-      };
+      logHibernation("start", "Starting terminal renderer hibernation", { epoch });
 
       try {
         await invoke("detach_session_renderer", { sessionId });
-        rendererDetached = true;
-        if (!canHibernateRenderer({ allowPending: true })) {
-          await restoreDetachedRenderer();
+        detachedHibernateEpochRef.current = epoch;
+        hibernationPhaseRef.current = "detached";
+        logHibernation("detached", "Detached terminal renderer from backend output", { epoch });
+
+        if (
+          epoch !== hibernationEpochRef.current ||
+          !isTerminalAlive() ||
+          !canHibernateRenderer({ allowPending: true })
+        ) {
+          await restoreDetachedRenderer(epoch, "eligibility_changed");
           return;
         }
 
         const queuedTail = outputQueueToBoundedString(outputQueueRef.current);
         hibernationSnapshotRef.current = captureReconnectSnapshot(queuedTail);
         hibernationCleanupRef.current = true;
-        rendererDetached = false;
+        hibernationPhaseRef.current = "hibernated";
+        logHibernation("success", "Terminal renderer hibernated", { epoch });
+        hibernatedRef.current = true;
         setTerminalReady(false);
         setHibernated(true);
         setTerminalGeneration((generation) => generation + 1);
-      } catch {
+      } catch (error) {
         hibernationSnapshotRef.current = null;
-        await restoreDetachedRenderer();
+        hibernationPhaseRef.current = "failed";
+        logHibernation("fail", "Failed to hibernate terminal renderer", { epoch }, error);
+        await restoreDetachedRenderer(epoch, "error");
       } finally {
         hibernationPendingRef.current = false;
+        if (
+          hibernationPhaseRef.current === "preparing" ||
+          (hibernationPhaseRef.current === "detached" &&
+            detachedHibernateEpochRef.current !== epoch) ||
+          (hibernationPhaseRef.current === "failed" && detachedHibernateEpochRef.current === null)
+        ) {
+          hibernationPhaseRef.current = "idle";
+        }
       }
     };
 
     const scheduleHibernate = () => {
-      if (visibleRef.current || hibernateTimerRef.current !== null) return;
+      if (
+        visibleRef.current ||
+        hibernateTimerRef.current !== null ||
+        hibernationPhaseRef.current !== "idle"
+      ) {
+        return;
+      }
+      const epoch = hibernationEpochRef.current + 1;
+      hibernationEpochRef.current = epoch;
+      logHibernation("scheduled", "Scheduled terminal renderer hibernation", { epoch });
       hibernateTimerRef.current = window.setTimeout(() => {
         hibernateTimerRef.current = null;
-        void hibernateRenderer();
+        void hibernateRenderer(epoch);
       }, XTERM_PERFORMANCE_CONFIG.lifecycle.deepHibernateDelayMs);
     };
 
@@ -2257,6 +2404,7 @@ export default function XTerminal({
 
       const nextErrorUnlisten = await listen<string>(`session-error-${sessionId}`, (event) => {
         if (!isTerminalAlive()) return;
+        requestWake("session_error");
         const message = String(event.payload || tRef.current("terminal.connectionFailed"));
         enterDisconnectedState({
           title: tRef.current("terminal.connectionFailed"),
@@ -2275,6 +2423,7 @@ export default function XTerminal({
 
       const nextClosedUnlisten = await listen<void>(`session-closed-${sessionId}`, () => {
         if (!isTerminalAlive()) return;
+        requestWake("session_closed");
         enterDisconnectedState({
           title: tRef.current("terminal.sessionDisconnected"),
           titleColor: "31",
@@ -2289,6 +2438,7 @@ export default function XTerminal({
 
       const nextFocusUnlisten = await listen<void>(`focus-terminal-${sessionId}`, () => {
         if (!isTerminalAlive()) return;
+        requestWake("focus");
         terminal.focus();
       });
       if (disposed) {
@@ -2300,7 +2450,9 @@ export default function XTerminal({
       const nextCaptureUnlisten = await listen<AiCaptureEvent>(
         `ai-capture-${sessionId}`,
         (event) => {
+          if (!isTerminalAlive()) return;
           const payload = event.payload;
+          requestWake("ai");
           if (payload.type === "commandStart") {
             aiCapturingRef.current = true;
             inputStateRef.current = createTerminalInputState();
@@ -2327,6 +2479,7 @@ export default function XTerminal({
         `zmodem-event-${sessionId}`,
         (event) => {
           if (!isTerminalAlive()) return;
+          requestWake("zmodem");
           if (event.payload.type === "detected" || event.payload.type === "progress") {
             zmodemActiveRef.current = true;
           } else if (event.payload.type === "complete" || event.payload.type === "failed") {
@@ -2346,7 +2499,24 @@ export default function XTerminal({
       try {
         await initialReplayPromise.catch(() => {});
         await invoke("attach_session", { sessionId });
-      } catch {
+        detachedHibernateEpochRef.current = null;
+        if (
+          hibernationPhaseRef.current === "waking" ||
+          hibernationPhaseRef.current === "hibernated"
+        ) {
+          logHibernation("wake", "Attached backend output after terminal wake", {
+            reason: "terminal_ready",
+          });
+        }
+        hibernationPhaseRef.current = "idle";
+      } catch (error) {
+        hibernationPhaseRef.current = "failed";
+        logHibernation(
+          "fail",
+          "Failed to attach backend output after terminal wake",
+          { reason: "terminal_ready" },
+          error,
+        );
         // The session may already be gone during mount/unmount races.
       }
     };
@@ -2356,6 +2526,9 @@ export default function XTerminal({
 
     const dataDisposable = terminal.onData((data) => {
       if (aiCapturingRef.current) return;
+      if (hibernationPhaseRef.current !== "idle") {
+        requestWake("input");
+      }
 
       if (disconnectedRef.current) {
         if (data === "\r" && canReconnectDisconnectedSession() && !reconnectingRef.current) {
@@ -2699,6 +2872,36 @@ export default function XTerminal({
     return () => {
       disposed = true;
       handleVisibilityChangeRef.current = null;
+      const cleanupDetachedEpoch = detachedHibernateEpochRef.current;
+      const isHibernateRendererCleanup =
+        hibernationCleanupRef.current && hibernationPhaseRef.current === "hibernated";
+      if (isHibernateRendererCleanup) {
+        clearHibernateTimer();
+      } else {
+        invalidateHibernation("cleanup");
+      }
+      if (!isHibernateRendererCleanup && cleanupDetachedEpoch !== null) {
+        void invoke("attach_session", { sessionId })
+          .then(() => {
+            if (detachedHibernateEpochRef.current === cleanupDetachedEpoch) {
+              detachedHibernateEpochRef.current = null;
+            }
+            hibernationPhaseRef.current = "idle";
+            logHibernation("rollback", "Rolled back detached renderer during cleanup", {
+              reason: "cleanup",
+              epoch: cleanupDetachedEpoch,
+            });
+          })
+          .catch((error) => {
+            hibernationPhaseRef.current = "failed";
+            logHibernation(
+              "fail",
+              "Failed to roll back detached renderer during cleanup",
+              { reason: "cleanup", epoch: cleanupDetachedEpoch },
+              error,
+            );
+          });
+      }
       setTerminalReady(false);
       containerEl.removeEventListener("mousedown", handleTerminalMouseDown);
       containerEl.removeEventListener("mouseup", handleTerminalMouseUp);

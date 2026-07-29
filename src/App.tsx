@@ -1,3 +1,4 @@
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { downloadDir } from "@tauri-apps/api/path";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -124,8 +125,21 @@ function isSessionCreationCancelled(error: unknown) {
   return getErrorMessage(error).toLowerCase().includes("session creation cancelled");
 }
 
+async function attachSessionBeforeClose(sessionId: string) {
+  await tauriInvoke("attach_session", { sessionId }).catch((error) => {
+    logger.debug({
+      domain: "session.lifecycle",
+      event: "session.attach_before_close_failed",
+      message: "Best-effort attach before close failed",
+      ids: { session_id: sessionId },
+      error,
+    });
+  });
+}
+
 async function closeStaleCreatedSession(sessionId: string) {
   try {
+    await attachSessionBeforeClose(sessionId);
     await invoke("close_session", { sessionId });
     clearSessionCommandHistory(sessionId);
   } catch (error) {
@@ -1162,6 +1176,7 @@ function App() {
       }
 
       try {
+        await attachSessionBeforeClose(pane.sessionId);
         await invoke("close_session", { sessionId: pane.sessionId });
         clearSessionCommandHistory(pane.sessionId);
         setSyncGroups((prev) => purgeSessionFromGroups(pane.sessionId, prev));
@@ -2172,6 +2187,7 @@ function App() {
 
       if (!tab || !pane) {
         try {
+          await attachSessionBeforeClose(sessionId);
           await invoke("close_session", { sessionId });
           clearSessionCommandHistory(sessionId);
         } catch (error) {
