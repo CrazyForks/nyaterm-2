@@ -33,10 +33,30 @@ describe("parseExternalOpenUrl", () => {
     expect(intent(result).usernameSpecified).toBe(true);
   });
 
-  it("rejects inline passwords", () => {
+  it("parses one-time SSH URL passwords", () => {
     const result = parseExternalOpenUrl("ssh://root:secret@example.com:22");
+    expect(result.ok).toBe(true);
+    expect(sshPassword(intent(result))).toBe("secret");
+    expect(intent(result).passwordSpecified).toBe(true);
+  });
+
+  it("decodes URL-encoded SSH URL passwords", () => {
+    const result = parseExternalOpenUrl("ssh://user:p%40ss%3Aword@example.com:22");
+    expect(result.ok).toBe(true);
+    expect(sshPassword(intent(result))).toBe("p@ss:word");
+  });
+
+  it("rejects NyaTerm deep link passwords", () => {
+    const result = parseExternalOpenUrl(
+      "nyaterm://connect/ssh?host=example.com&username=root&password=secret",
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errorKey).toBe("externalOpen.inlinePassword");
+  });
+
+  it("rejects non-URL password forms", () => {
+    expect(parseExternalOpenUrl("root:secret@example.com").ok).toBe(false);
+    expect(parseExternalOpenUrl("ssh root:secret@example.com").ok).toBe(false);
   });
 
   it("rejects invalid ports", () => {
@@ -95,6 +115,17 @@ describe("findExternalConnectionMatches", () => {
     expect(result.kind).toBe("temporary");
   });
 
+  it("returns a temporary config when an SSH URL includes a one-time password", () => {
+    const result = findExternalConnectionMatches(
+      [sshConnection({ username: "root" })],
+      intent(parseExternalOpenUrl("ssh://root:secret@example.com:22")),
+    );
+    expect(result.kind).toBe("temporary");
+    if (result.kind === "temporary" && result.config.protocol === "ssh") {
+      expect(sshPasswordFromConfig(result.config)).toBe("secret");
+    }
+  });
+
   it("returns ambiguous when multiple saved connections match", () => {
     const result = findExternalConnectionMatches(
       [sshConnection({ id: "a", username: "root" }), sshConnection({ id: "b", username: "root" })],
@@ -135,6 +166,15 @@ describe("findExternalConnectionMatches", () => {
 function intent(result: ReturnType<typeof parseExternalOpenUrl>): ExternalOpenIntent {
   if (!result.ok) throw new Error(result.errorKey);
   return result.intent;
+}
+
+function sshPassword(intent: ExternalOpenIntent) {
+  if (intent.temporary.protocol !== "ssh") return null;
+  return sshPasswordFromConfig(intent.temporary);
+}
+
+function sshPasswordFromConfig(config: Extract<ExternalOpenIntent["temporary"], { protocol: "ssh" }>) {
+  return config.auth.type === "password" ? config.auth.password : null;
 }
 
 function sshConnection(overrides: Partial<SavedConnection> = {}): SavedConnection {

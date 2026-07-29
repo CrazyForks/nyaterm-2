@@ -14,6 +14,7 @@ export interface ExternalOpenIntent {
   port: number;
   username: string | null;
   usernameSpecified: boolean;
+  passwordSpecified: boolean;
   temporary: TemporaryLinkConfig;
 }
 
@@ -72,6 +73,10 @@ export function findExternalConnectionMatches(
   savedConnections: SavedConnection[],
   intent: ExternalOpenIntent,
 ): ExternalConnectionResolution {
+  if (intent.protocol === "ssh" && intent.passwordSpecified) {
+    return { kind: "temporary", config: intent.temporary };
+  }
+
   const matches = savedConnections.filter((connection) => {
     if (connection.type !== intent.protocol) return false;
     if (normalizeHostForMatch(connection.host ?? "") !== intent.host) return false;
@@ -113,16 +118,19 @@ function parseExternalTemporaryUrl(
   const port = normalizePortForProtocol(parsed.config.port, protocol);
 
   if (protocol === "ssh") {
+    const sshConfig = parsed.config as TemporarySshLinkConfig;
     const usernameSpecified = url.username.length > 0;
+    const passwordSpecified = temporarySshPasswordSpecified(sshConfig);
     return {
       ok: true,
       intent: {
         protocol,
         host,
         port,
-        username: usernameSpecified ? decodeURIComponent(url.username) : null,
+        username: usernameSpecified ? sshConfig.username : null,
         usernameSpecified,
-        temporary: normalizeTemporaryConfig(parsed.config, host, port),
+        passwordSpecified,
+        temporary: normalizeTemporaryConfig(sshConfig, host, port),
       },
     };
   }
@@ -135,6 +143,7 @@ function parseExternalTemporaryUrl(
       port,
       username: null,
       usernameSpecified: false,
+      passwordSpecified: false,
       temporary: normalizeTemporaryConfig(parsed.config, host, port),
     },
   };
@@ -185,6 +194,7 @@ function parseNyatermUrl(rawUrl: string): ExternalOpenParseResult {
         port,
         username,
         usernameSpecified: params.has("username"),
+        passwordSpecified: false,
         temporary: createTemporarySshConfig(host, port, username),
       },
     };
@@ -202,6 +212,7 @@ function parseNyatermUrl(rawUrl: string): ExternalOpenParseResult {
       port,
       username: null,
       usernameSpecified: false,
+      passwordSpecified: false,
       temporary: createTemporaryTelnetConfig(host, port),
     },
   };
@@ -213,7 +224,12 @@ function normalizeTemporaryConfig(
   port: number,
 ): TemporaryLinkConfig {
   if (config.protocol === "ssh") {
-    return createTemporarySshConfig(host, port, config.username);
+    return createTemporarySshConfig(
+      host,
+      port,
+      config.username,
+      temporarySshPassword(config),
+    );
   }
   if (config.protocol === "telnet") {
     return createTemporaryTelnetConfig(host, port);
@@ -225,6 +241,7 @@ function createTemporarySshConfig(
   host: string,
   port: number,
   username: string,
+  password: string | null = null,
 ): TemporarySshLinkConfig {
   return {
     protocol: "ssh",
@@ -232,7 +249,7 @@ function createTemporarySshConfig(
     host,
     port,
     username,
-    auth: { type: "password", password: null },
+    auth: { type: "password", password },
     backspace_mode: "del",
     x11_forwarding: false,
     x11_display: "",
@@ -240,6 +257,14 @@ function createTemporarySshConfig(
     proxy_jump: null,
     post_login: null,
   };
+}
+
+function temporarySshPassword(config: TemporarySshLinkConfig) {
+  return config.auth.type === "password" && config.auth.password ? config.auth.password : null;
+}
+
+function temporarySshPasswordSpecified(config: TemporaryLinkConfig) {
+  return config.protocol === "ssh" && temporarySshPassword(config) !== null;
 }
 
 function createTemporaryTelnetConfig(host: string, port: number): TemporaryTelnetLinkConfig {
