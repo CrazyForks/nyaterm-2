@@ -200,6 +200,52 @@ export interface ConnectionPostLogin {
   delay_ms: number;
 }
 
+export type AssetDeviceType =
+  | "physical"
+  | "virtual"
+  | "cloud"
+  | "network"
+  | "storage"
+  | "embedded"
+  | "other";
+
+export type AssetAcceleratorType = "gpu" | "npu" | "other";
+
+export interface AssetAccelerator {
+  type: AssetAcceleratorType;
+  vendor?: string;
+  model?: string;
+  count?: number;
+  memory_bytes?: number;
+}
+
+export interface AssetDisk {
+  kind?: "hdd" | "ssd" | "nvme" | "other";
+  model?: string;
+  capacity_bytes?: number;
+  count?: number;
+  purpose?: "system" | "data" | "cache" | "other";
+}
+
+export interface AssetMetadata {
+  device_type?: AssetDeviceType;
+  os_name?: string;
+  os_version?: string;
+  architecture?: string;
+  kernel_version?: string;
+  hostname?: string;
+  cpu_model?: string;
+  cpu_sockets?: number;
+  cpu_cores?: number;
+  cpu_threads?: number;
+  memory_bytes?: number;
+  accelerators?: AssetAccelerator[];
+  disks?: AssetDisk[];
+  tags?: string[];
+  notes?: string;
+  updated_at?: string;
+}
+
 export interface TelnetAutoLoginConfig {
   enabled?: boolean;
   send_wake_enter?: boolean;
@@ -269,6 +315,7 @@ export interface SavedConnection {
   post_login?: ConnectionPostLogin;
   ssh_algorithms?: SshAlgorithmPreferences;
   sftp?: SftpSettings;
+  asset?: AssetMetadata;
   /** SSH-specific fields (present when type === "ssh"). */
   host?: string;
   port?: number;
@@ -417,6 +464,7 @@ export type RestorableTerminalWindowNode =
 export interface UiConfig {
   open_tabs: RestorableTab[];
   terminal_window_layout: RestorableTerminalWindowNode | null;
+  start_workspace_mode?: "workbench" | "assets";
   left_width: number;
   right_width: number;
   quick_cmd_height: number;

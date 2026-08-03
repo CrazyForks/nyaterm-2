@@ -25,10 +25,11 @@ pub use cloud_sync::{
 };
 #[allow(unused_imports)]
 pub use connection::{
-    AiExecutionProfile, AppConfig, ConnectionAuth, ConnectionNetwork, ConnectionType, Group,
-    SavedConnection, SessionsConfig, SftpCwdFollowMode, SftpSettings, SshAlgorithmMode,
-    SshAlgorithmPreferences, TelnetAutoLoginConfig, load_config, load_connection_by_id,
-    load_sessions, resolve_connection_encoding, save_config, save_sessions,
+    AiExecutionProfile, AppConfig, AssetAccelerator, AssetAcceleratorType, AssetDeviceType,
+    AssetDisk, AssetDiskKind, AssetDiskPurpose, AssetMetadata, ConnectionAuth, ConnectionNetwork,
+    ConnectionType, Group, SavedConnection, SessionsConfig, SftpCwdFollowMode, SftpSettings,
+    SshAlgorithmMode, SshAlgorithmPreferences, TelnetAutoLoginConfig, load_config,
+    load_connection_by_id, load_sessions, resolve_connection_encoding, save_config, save_sessions,
 };
 #[allow(unused_imports)]
 pub use credential::{

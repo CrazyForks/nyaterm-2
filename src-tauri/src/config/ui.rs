@@ -219,6 +219,8 @@ pub struct UiConfig {
     pub open_tabs: Vec<RestorableTab>,
     #[serde(default)]
     pub terminal_window_layout: Option<RestorableTerminalWindowNode>,
+    #[serde(default = "default_start_workspace_mode")]
+    pub start_workspace_mode: String,
     #[serde(default = "default_left_width")]
     pub left_width: f64,
     #[serde(default = "default_right_width")]
@@ -321,6 +323,10 @@ fn default_quick_cmd_selected_category() -> String {
     "all".to_string()
 }
 
+fn default_start_workspace_mode() -> String {
+    "workbench".to_string()
+}
+
 fn default_active_left_panel() -> Option<String> {
     Some("fileExplorer".to_string())
 }
@@ -390,6 +396,7 @@ impl Default for UiConfig {
         Self {
             open_tabs: vec![],
             terminal_window_layout: None,
+            start_workspace_mode: default_start_workspace_mode(),
             left_width: default_left_width(),
             right_width: default_right_width(),
             quick_cmd_height: default_quick_cmd_height(),

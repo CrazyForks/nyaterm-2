@@ -245,6 +245,34 @@
   }
 }
 
+/* ── Start workspace asset view ────────────────────────────────────────── */
+.asset-table-container {
+  container-type: inline-size;
+}
+
+@container (max-width: 56rem) {
+  .asset-table-container .asset-col-accelerators {
+    display: none;
+  }
+}
+
+@container (max-width: 44rem) {
+  .asset-table-container .asset-col-storage {
+    display: none;
+  }
+
+  .asset-table-container table {
+    min-width: 42rem;
+  }
+}
+
+@container (max-width: 34rem) {
+  .asset-table-container .asset-col-cpu,
+  .asset-table-container .asset-col-memory {
+    display: none;
+  }
+}
+
 /* ── Active tab indicator ───────────────────────────────────────────────── */
 .active-tab {
   border-bottom: 2px solid var(--df-primary, #3b82f6);

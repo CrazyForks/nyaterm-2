@@ -314,6 +314,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   ui: {
     open_tabs: [],
     terminal_window_layout: null,
+    start_workspace_mode: "workbench",
     left_width: 256,
     right_width: 288,
     quick_cmd_height: 180,

@@ -52,6 +52,11 @@ import {
   NON_PANEL_IDS,
   type TrayAction,
 } from "./lib/appWorkspace";
+import {
+  type AssetMonitoringCacheEntry,
+  buildAssetPatchFromRemoteStats,
+  recordAssetMonitoringPatch,
+} from "./lib/assetMonitoring";
 import { updateConnectionAutoIconAfterSessionStart } from "./lib/connectionAutoIcon";
 import { getErrorMessage, shouldPromptConnectionEditOnFailure } from "./lib/errors";
 import {
@@ -116,6 +121,7 @@ import {
 } from "./lib/workspaceTabs";
 import type {
   AppSettings,
+  AssetMetadata,
   CloudConflictPreview,
   PaneSplitDirection,
   SavedConnection,
@@ -411,6 +417,8 @@ function App() {
   // Recording state: tracks which sessions are currently being recorded
   const [recordingSessions, setRecordingSessions] = useState<Set<string>>(new Set());
   const [liveSessionIds, setLiveSessionIds] = useState<Set<string> | null>(null);
+  const assetMonitoringCacheRef = useRef<Map<string, AssetMonitoringCacheEntry>>(new Map());
+  const assetMonitoringFlushesRef = useRef<Set<string>>(new Set());
 
   const refreshRecordingSessions = useCallback(async () => {
     try {
@@ -816,6 +824,81 @@ function App() {
   );
   const tabsRef = useRef(tabs);
   const tabsById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabs]);
+  const savedSshConnectionIdBySessionId = useMemo(() => {
+    const sshConnectionIds = new Set(
+      savedConnections
+        .filter((connection) => connection.type === "ssh")
+        .map((connection) => connection.id),
+    );
+    const result = new Map<string, string>();
+
+    for (const tab of tabs) {
+      for (const pane of collectSessionPanes(tab.root)) {
+        if (
+          !pane.connecting &&
+          !pane.connectError &&
+          pane.type === "SSH" &&
+          pane.connectionId &&
+          sshConnectionIds.has(pane.connectionId)
+        ) {
+          result.set(pane.sessionId, pane.connectionId);
+        }
+      }
+    }
+
+    return result;
+  }, [savedConnections, tabs]);
+
+  const handleAssetMonitoringPatch = useCallback(
+    (sessionId: string, patch: AssetMetadata) => {
+      const connectionId = savedSshConnectionIdBySessionId.get(sessionId);
+      if (!connectionId) return;
+
+      recordAssetMonitoringPatch(assetMonitoringCacheRef.current, sessionId, connectionId, patch);
+    },
+    [savedSshConnectionIdBySessionId],
+  );
+
+  const flushAssetMonitoringCache = useCallback(async (sessionId: string) => {
+    const entry = assetMonitoringCacheRef.current.get(sessionId);
+    if (!entry || assetMonitoringFlushesRef.current.has(sessionId)) return;
+
+    assetMonitoringFlushesRef.current.add(sessionId);
+    try {
+      await invoke("update_connection_asset_from_monitoring", {
+        connectionId: entry.connectionId,
+        assetPatch: {
+          ...entry.lastAssetPatch,
+          updated_at: new Date().toISOString(),
+        },
+      });
+      assetMonitoringCacheRef.current.delete(sessionId);
+    } catch (error) {
+      const message = getErrorMessage(error).toLowerCase();
+      if (message.includes("not found")) {
+        assetMonitoringCacheRef.current.delete(sessionId);
+      }
+      logger.error({
+        domain: "session.lifecycle",
+        event: "asset.flush_failed",
+        message: "Failed to save monitored asset snapshot",
+        ids: { connection_id: entry.connectionId, session_id: sessionId },
+        error,
+      });
+    } finally {
+      assetMonitoringFlushesRef.current.delete(sessionId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (liveSessionIds === null) return;
+
+    for (const sessionId of assetMonitoringCacheRef.current.keys()) {
+      if (!liveSessionIds.has(sessionId)) {
+        void flushAssetMonitoringCache(sessionId);
+      }
+    }
+  }, [flushAssetMonitoringCache, liveSessionIds]);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -1428,6 +1511,7 @@ function App() {
       }
 
       try {
+        await flushAssetMonitoringCache(pane.sessionId);
         await attachSessionBeforeClose(pane.sessionId);
         await invoke("close_session", { sessionId: pane.sessionId });
         clearSessionCommandHistory(pane.sessionId);
@@ -1444,7 +1528,7 @@ function App() {
         return false;
       }
     },
-    [setSyncGroups],
+    [flushAssetMonitoringCache, setSyncGroups],
   );
 
   const closeWorkspaceTabSessions = useCallback(
@@ -2819,6 +2903,15 @@ function App() {
     remoteStatsEnabled,
     uiConfig.remote_stats_interval ?? 3,
   );
+  useEffect(() => {
+    if (!activeLiveSshSessionId || !remoteStats.stats) return;
+
+    const patch = buildAssetPatchFromRemoteStats(remoteStats.stats);
+    if (patch) {
+      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+    }
+  }, [activeLiveSshSessionId, handleAssetMonitoringPatch, remoteStats.stats]);
+
   const activeSerialSessionId =
     activePane && !activePane.connecting && !activePane.connectError && activePane.type === "Serial"
       ? activePane.sessionId
@@ -3041,6 +3134,7 @@ function App() {
         onCommandSend={handleHistoryCommand}
         onToggleSessionRecording={handleToggleSessionRecording}
         onSaveSessionTranscript={handleSaveSessionTranscript}
+        onAssetMonitoringPatch={handleAssetMonitoringPatch}
       />
     ),
     [
@@ -3056,6 +3150,7 @@ function App() {
       handleDisconnectSessionById,
       handleEditConnection,
       handleHistoryCommand,
+      handleAssetMonitoringPatch,
       handleNewSession,
       handleOpenTemporarySshLink,
       handleReconnectSessionById,
@@ -3216,6 +3311,8 @@ function App() {
           onOpenChat: handleOpenChat,
           onShowCommands: handleShowAllCommands,
           onSwitchTerminal: handleOpenSessionSwitcher,
+          onConnectConnection: connectSavedConnection,
+          onEditConnection: handleEditConnection,
         }}
         bottomPanel={{
           activePanel: activeBottomPanel,
