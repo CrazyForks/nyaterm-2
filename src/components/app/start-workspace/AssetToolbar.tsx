@@ -29,17 +29,6 @@ export default function AssetToolbar({
 }: AssetToolbarProps) {
   return (
     <div className="shrink-0 space-y-3 px-5 pb-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-base font-semibold" style={{ color: "var(--df-text)" }}>
-            {t("assets.title")}
-          </h2>
-          <span className="text-xs tabular-nums" style={{ color: "var(--df-text-muted)" }}>
-            {totalCount}
-          </span>
-        </div>
-      </div>
-
       <div className="relative">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2"
