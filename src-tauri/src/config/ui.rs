@@ -180,6 +180,7 @@ impl Default for ActivityBarLayout {
 fn default_left_top() -> Vec<String> {
     vec![
         "fileExplorer".to_string(),
+        "notes".to_string(),
         "network".to_string(),
         "securityAuth".to_string(),
     ]
@@ -295,6 +296,10 @@ pub struct UiConfig {
     pub file_explorer_auto_sync_cwd_connection_ids: Vec<String>,
     #[serde(default)]
     pub file_explorer_favorite_dirs_by_connection_id: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub notes_expanded_folder_ids: Vec<String>,
+    #[serde(default)]
+    pub notes_last_selected_node_id: Option<String>,
     #[serde(default)]
     pub activity_bar_layout: ActivityBarLayout,
 }
@@ -434,6 +439,8 @@ impl Default for UiConfig {
             file_explorer_show_hidden_files: true,
             file_explorer_auto_sync_cwd_connection_ids: vec![],
             file_explorer_favorite_dirs_by_connection_id: HashMap::new(),
+            notes_expanded_folder_ids: vec![],
+            notes_last_selected_node_id: None,
             activity_bar_layout: ActivityBarLayout::default(),
         }
     }

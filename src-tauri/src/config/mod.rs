@@ -7,6 +7,7 @@ mod cloud_sync;
 mod connection;
 mod credential;
 mod key;
+mod note;
 mod otp;
 mod password;
 mod proxy;
@@ -39,6 +40,11 @@ pub use credential::{
 #[allow(unused_imports)]
 pub use key::{
     KeysConfig, SshKey, decrypt_key_cert, decrypt_key_pem, load_key_by_id, load_keys, save_keys,
+};
+#[allow(unused_imports)]
+pub use note::{
+    DeleteNoteNodeResult, NoteDocument, NoteFolder, NoteSummary, NoteTreePayload,
+    NotesChangedEvent, NotesSnapshot,
 };
 #[allow(unused_imports)]
 pub use otp::{OtpConfig, OtpEntry, load_otp_entries, load_otp_entry_by_id, save_otp_entries};

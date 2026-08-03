@@ -179,8 +179,10 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     file_explorer_show_hidden_files: true,
     file_explorer_auto_sync_cwd_connection_ids: [],
     file_explorer_favorite_dirs_by_connection_id: {},
+    notes_expanded_folder_ids: [],
+    notes_last_selected_node_id: null,
     activity_bar_layout: {
-      left_top: ["fileExplorer", "network", "securityAuth"],
+      left_top: ["fileExplorer", "notes", "network", "securityAuth"],
       left_bottom: ["syncBackupHistory", "settings"],
       right_top: [
         "savedConnections",

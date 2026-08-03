@@ -9,6 +9,7 @@ import FileExplorer from "@/components/panel/file-explorer";
 import FileTransfer from "@/components/panel/file-explorer/FileTransfer";
 import GpuMonitor from "@/components/panel/GpuMonitor";
 import NetworkPanel from "@/components/panel/NetworkPanel";
+import NotesPanel from "@/components/panel/notes/NotesPanel";
 import ProcessManager from "@/components/panel/ProcessManager";
 import RecordingPanel from "@/components/panel/RecordingPanel";
 import ResourceMonitor from "@/components/panel/ResourceMonitor";
@@ -102,6 +103,8 @@ export default function AppPanelContent({
         );
       case "network":
         return <NetworkPanel />;
+      case "notes":
+        return <NotesPanel />;
       case "securityAuth":
         return <SecurityAuthPanel activeSessionId={activeSessionId} />;
       case "syncBackupHistory":

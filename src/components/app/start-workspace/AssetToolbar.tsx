@@ -28,7 +28,7 @@ export default function AssetToolbar({
   onViewModeChange,
 }: AssetToolbarProps) {
   return (
-    <div className="shrink-0 space-y-3 px-5 pb-3">
+    <div className="shrink-0 space-y-3 px-5 pb-3" data-total-count={totalCount}>
       <div className="relative">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2"

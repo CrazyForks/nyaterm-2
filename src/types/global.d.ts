@@ -416,7 +416,12 @@ export interface RestorableTab {
   locked?: boolean;
 }
 
-export type LeftPanelId = "fileExplorer" | "network" | "securityAuth" | "syncBackupHistory";
+export type LeftPanelId =
+  | "fileExplorer"
+  | "notes"
+  | "network"
+  | "securityAuth"
+  | "syncBackupHistory";
 
 export type RightPanelId =
   | "savedConnections"
@@ -507,6 +512,8 @@ export interface UiConfig {
   file_explorer_show_hidden_files: boolean;
   file_explorer_auto_sync_cwd_connection_ids: string[];
   file_explorer_favorite_dirs_by_connection_id: Record<string, string[]>;
+  notes_expanded_folder_ids: string[];
+  notes_last_selected_node_id: string | null;
   activity_bar_layout: ActivityBarLayout;
 }
 

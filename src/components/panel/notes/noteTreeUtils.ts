@@ -1,0 +1,128 @@
+import type { NoteFolder, NoteNodeKind, NoteSummary, NoteTreeNode } from "@/types/notes";
+
+export function buildNoteTree(folders: NoteFolder[], notes: NoteSummary[]): NoteTreeNode[] {
+  const nodes = new Map<string, NoteTreeNode>();
+  const roots: NoteTreeNode[] = [];
+
+  for (const folder of folders) {
+    nodes.set(folder.id, {
+      id: folder.id,
+      kind: "folder",
+      parentId: folder.parent_id ?? null,
+      name: folder.name,
+      sortOrder: folder.sort_order,
+      updatedAtMs: folder.updated_at_ms,
+      children: [],
+    });
+  }
+
+  for (const note of notes) {
+    nodes.set(note.id, {
+      id: note.id,
+      kind: "note",
+      parentId: note.parent_id ?? null,
+      name: note.title,
+      sortOrder: note.sort_order,
+      revision: note.revision,
+      updatedAtMs: note.updated_at_ms,
+      children: [],
+    });
+  }
+
+  for (const node of nodes.values()) {
+    if (node.parentId && nodes.has(node.parentId)) {
+      nodes.get(node.parentId)?.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  const sortNodes = (items: NoteTreeNode[]) => {
+    items.sort(compareNoteNodes);
+    for (const item of items) sortNodes(item.children);
+  };
+  sortNodes(roots);
+  return roots;
+}
+
+export function compareNoteNodes(left: NoteTreeNode, right: NoteTreeNode) {
+  if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+  if (left.kind !== right.kind) return left.kind === "folder" ? -1 : 1;
+  return (
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+export function flattenVisibleNoteTree(
+  nodes: NoteTreeNode[],
+  expandedFolderIds: Set<string>,
+): NoteTreeNode[] {
+  const result: NoteTreeNode[] = [];
+  const visit = (items: NoteTreeNode[]) => {
+    for (const item of items) {
+      result.push(item);
+      if (item.kind === "folder" && expandedFolderIds.has(item.id)) {
+        visit(item.children);
+      }
+    }
+  };
+  visit(nodes);
+  return result;
+}
+
+export function findNoteNode(nodes: NoteTreeNode[], id: string | null): NoteTreeNode | null {
+  if (!id) return null;
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = findNoteNode(node.children, id);
+    if (child) return child;
+  }
+  return null;
+}
+
+export function isDescendantFolder(nodes: NoteTreeNode[], sourceId: string, targetId: string) {
+  const source = findNoteNode(nodes, sourceId);
+  if (!source || source.kind !== "folder") return false;
+  return Boolean(findNoteNode(source.children, targetId));
+}
+
+export function normalizeNoteInputName(value: string) {
+  return value.trim();
+}
+
+export function validateNoteInputName(value: string, siblingNames: string[]) {
+  const name = normalizeNoteInputName(value);
+  if (!name) return "empty";
+  if (Array.from(name).length > 120) return "tooLong";
+  if (/[\\/]/.test(name)) return "slash";
+  if (Array.from(name).some((char) => /[\u0000-\u001f\u007f]/.test(char))) return "control";
+  if (siblingNames.some((item) => item.toLowerCase() === name.toLowerCase())) return "duplicate";
+  return null;
+}
+
+export function collectSiblingNames(
+  folders: NoteFolder[],
+  notes: NoteSummary[],
+  parentId: string | null,
+  exclude?: { id: string; kind: NoteNodeKind },
+) {
+  const names: string[] = [];
+  for (const folder of folders) {
+    if (
+      (folder.parent_id ?? null) === parentId &&
+      !(exclude?.kind === "folder" && exclude.id === folder.id)
+    ) {
+      names.push(folder.name);
+    }
+  }
+  for (const note of notes) {
+    if (
+      (note.parent_id ?? null) === parentId &&
+      !(exclude?.kind === "note" && exclude.id === note.id)
+    ) {
+      names.push(note.title);
+    }
+  }
+  return names;
+}

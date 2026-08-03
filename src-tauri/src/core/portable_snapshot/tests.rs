@@ -265,6 +265,7 @@ mod tests {
             history: Vec::new(),
             master_key_token: Some("wrapped".to_string()),
             known_hosts: "example.com ssh-ed25519 AAAA\n".to_string(),
+            notes: config::NotesSnapshot::default(),
         };
         snapshot.payload_hash = calculate_payload_hash(&snapshot).expect("hash snapshot");
         snapshot
@@ -418,6 +419,25 @@ mod tests {
     }
 
     #[test]
+    fn portable_snapshot_hash_changes_when_note_markdown_changes() {
+        let left = sample_snapshot();
+        let mut right = sample_snapshot();
+        right.notes.notes.push(config::NoteDocument {
+            id: "note-1".to_string(),
+            parent_id: None,
+            title: "Note".to_string(),
+            markdown: "first".to_string(),
+            sort_order: 0,
+            revision: 1,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        });
+        right.payload_hash = calculate_payload_hash(&right).expect("right hash");
+
+        assert_ne!(left.payload_hash, right.payload_hash);
+    }
+
+    #[test]
     fn portable_snapshot_zip_roundtrip() {
         let snapshot = sample_snapshot();
 
@@ -428,6 +448,7 @@ mod tests {
         assert_eq!(decoded.payload_hash, snapshot.payload_hash);
         assert_eq!(decoded.master_key_token, snapshot.master_key_token);
         assert_eq!(decoded.known_hosts, snapshot.known_hosts);
+        assert_eq!(decoded.notes, snapshot.notes);
     }
 
     #[test]
@@ -563,6 +584,8 @@ mod tests {
 
         assert_eq!(decoded.revision_id, snapshot.revision_id);
         assert!(!decoded.settings.appearance.panel_multi_open);
+        assert!(decoded.notes.folders.is_empty());
+        assert!(decoded.notes.notes.is_empty());
         assert_eq!(decoded.payload_hash, snapshot.payload_hash);
         assert_ne!(decoded.payload_hash, legacy_hash);
     }
