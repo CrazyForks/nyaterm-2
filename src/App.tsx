@@ -33,6 +33,8 @@ import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useIdleLock } from "./hooks/useIdleLock";
 import { useMacSelectionGuard } from "./hooks/useMacSelectionGuard";
 import { useModalChildWindows } from "./hooks/useModalChildWindows";
+import { useRemoteGpuOverview } from "./hooks/useRemoteGpuOverview";
+import { useRemoteNpuOverview } from "./hooks/useRemoteNpuOverview";
 import { useRemoteStats } from "./hooks/useRemoteStats";
 import { resolveDisplayKeys } from "./hooks/useShortcutMap";
 import { useTerminalZoom } from "./hooks/useTerminalZoom";
@@ -54,6 +56,8 @@ import {
 } from "./lib/appWorkspace";
 import {
   type AssetMonitoringCacheEntry,
+  buildAssetPatchFromGpuOverview,
+  buildAssetPatchFromNpuOverview,
   buildAssetPatchFromRemoteStats,
   recordAssetMonitoringPatch,
 } from "./lib/assetMonitoring";
@@ -66,6 +70,7 @@ import {
 } from "./lib/externalOpen";
 import { invoke } from "./lib/invoke";
 import { logger } from "./lib/logger";
+import { normalizeHeaderStatusMode } from "./lib/headerStatus";
 import {
   listenOpenSendCommandPanel,
   type SendCommandPanelDraft,
@@ -2903,6 +2908,24 @@ function App() {
     remoteStatsEnabled,
     uiConfig.remote_stats_interval ?? 3,
   );
+  const headerStatusMode = normalizeHeaderStatusMode(uiConfig.header_status_mode);
+  const headerStatusVisible = uiConfig.header_status_visible !== false;
+  const gpuOverviewEnabled =
+    (uiConfig.show_gpu_monitor ?? false) || (headerStatusVisible && headerStatusMode === "gpu");
+  const npuOverviewEnabled =
+    (uiConfig.show_ascend_npu_monitor ?? false) ||
+    (headerStatusVisible && headerStatusMode === "npu");
+  const gpuOverviewState = useRemoteGpuOverview(
+    activeLiveSshSessionId,
+    gpuOverviewEnabled,
+    uiConfig.gpu_monitor_interval ?? 3,
+  );
+  const npuOverviewState = useRemoteNpuOverview(
+    activeLiveSshSessionId,
+    npuOverviewEnabled,
+    uiConfig.ascend_npu_monitor_interval ?? 3,
+  );
+
   useEffect(() => {
     if (!activeLiveSshSessionId || !remoteStats.stats) return;
 
@@ -2911,6 +2934,22 @@ function App() {
       handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
     }
   }, [activeLiveSshSessionId, handleAssetMonitoringPatch, remoteStats.stats]);
+  useEffect(() => {
+    if (!activeLiveSshSessionId || !gpuOverviewState.overview) return;
+
+    const patch = buildAssetPatchFromGpuOverview(gpuOverviewState.overview);
+    if (patch) {
+      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+    }
+  }, [activeLiveSshSessionId, gpuOverviewState.overview, handleAssetMonitoringPatch]);
+  useEffect(() => {
+    if (!activeLiveSshSessionId || !npuOverviewState.overview) return;
+
+    const patch = buildAssetPatchFromNpuOverview(npuOverviewState.overview);
+    if (patch) {
+      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+    }
+  }, [activeLiveSshSessionId, handleAssetMonitoringPatch, npuOverviewState.overview]);
 
   const activeSerialSessionId =
     activePane && !activePane.connecting && !activePane.connectError && activePane.type === "Serial"
@@ -3119,6 +3158,10 @@ function App() {
         activeSshSessionId={activeLiveSshSessionId}
         remoteStatsEnabled={remoteStatsEnabled}
         remoteStats={remoteStats}
+        gpuMonitorEnabled={uiConfig.show_gpu_monitor ?? false}
+        gpuOverviewState={gpuOverviewState}
+        npuMonitorEnabled={uiConfig.show_ascend_npu_monitor ?? false}
+        npuOverviewState={npuOverviewState}
         recordingSessions={recordingSessions}
         aiIntent={aiIntent}
         transferHeight={uiConfig.transfer_height || 180}
@@ -3134,7 +3177,6 @@ function App() {
         onCommandSend={handleHistoryCommand}
         onToggleSessionRecording={handleToggleSessionRecording}
         onSaveSessionTranscript={handleSaveSessionTranscript}
-        onAssetMonitoringPatch={handleAssetMonitoringPatch}
       />
     ),
     [
@@ -3146,11 +3188,12 @@ function App() {
       canReconnectSessionById,
       remoteStats,
       remoteStatsEnabled,
+      gpuOverviewState,
+      npuOverviewState,
       handleSaveSessionTranscript,
       handleDisconnectSessionById,
       handleEditConnection,
       handleHistoryCommand,
-      handleAssetMonitoringPatch,
       handleNewSession,
       handleOpenTemporarySshLink,
       handleReconnectSessionById,
@@ -3159,6 +3202,8 @@ function App() {
       handleTransferResize,
       connectSavedConnection,
       recordingSessions,
+      uiConfig.show_ascend_npu_monitor,
+      uiConfig.show_gpu_monitor,
       uiConfig.transfer_height,
     ],
   );
@@ -3217,6 +3262,8 @@ function App() {
           savedConnections,
           remoteStatsEnabled,
           remoteStats,
+          gpuOverviewState,
+          npuOverviewState,
           onSmartSplit: handleSmartSplit,
           onUnsplit: handleUnsplit,
           canUnsplit: terminalWindows?.kind === "split",

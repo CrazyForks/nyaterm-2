@@ -450,7 +450,7 @@ export interface ActivityBarLayout {
 /** Layout preferences: panel widths, active panels, theme. */
 export type QuickCommandViewMode = "list" | "compact" | "tile";
 export type QuickCommandSortMode = "created" | "name" | "useCount";
-export type HeaderStatusMode = "session" | "resources" | "host" | "datetime";
+export type HeaderStatusMode = "session" | "resources" | "host" | "datetime" | "gpu" | "npu";
 
 export type RestorableTerminalWindowNode =
   | {
