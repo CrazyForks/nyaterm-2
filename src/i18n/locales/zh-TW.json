@@ -2384,6 +2384,7 @@
     "duplicate": "複製工作階段",
     "duplicateFailed": "工作階段複製失敗",
     "duplicateWithCommand": "複製並執行命令",
+    "group": "分組",
     "ipCopied": "伺服器 IP 已複製",
     "lockTab": "鎖定標籤",
     "lockToggleFailed": "標籤鎖定狀態更新失敗",

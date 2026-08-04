@@ -2389,6 +2389,7 @@
     "duplicate": "复制会话",
     "duplicateFailed": "会话复制失败",
     "duplicateWithCommand": "复制并执行命令",
+    "group": "分组",
     "ipCopied": "服务器 IP 已复制",
     "lockTab": "锁定标签",
     "lockToggleFailed": "标签锁定状态更新失败",

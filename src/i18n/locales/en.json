@@ -2390,6 +2390,7 @@
     "duplicate": "Duplicate",
     "duplicateFailed": "Duplicate failed",
     "duplicateWithCommand": "Duplicate and Run Command",
+    "group": "Group",
     "ipCopied": "IP address copied",
     "lockTab": "Lock Tab",
     "lockToggleFailed": "Failed to update tab lock",

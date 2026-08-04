@@ -2378,6 +2378,7 @@
     "duplicate": "복제",
     "duplicateFailed": "복제 실패",
     "duplicateWithCommand": "복제 및 명령 실행",
+    "group": "그룹",
     "ipCopied": "IP 주소가 복사되었습니다",
     "lockTab": "탭 잠금",
     "lockToggleFailed": "탭 잠금 상태를 업데이트하지 못했습니다",
