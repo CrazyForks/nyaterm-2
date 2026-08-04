@@ -61,6 +61,21 @@ pub struct NoteTreePayload {
     pub notes: Vec<NoteSummary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoteUpdateResult {
+    pub note: NoteDocument,
+    pub changed: bool,
+    pub tree_changed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoteNodeChange {
+    pub changed: bool,
+    pub tree_changed: bool,
+    pub folder: Option<NoteFolder>,
+    pub note: Option<NoteSummary>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NotesChangedEvent {
@@ -68,6 +83,12 @@ pub struct NotesChangedEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_kind: Option<String>,
     pub ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folders: Vec<NoteFolder>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<NoteSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tree_changed: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

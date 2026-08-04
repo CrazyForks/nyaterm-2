@@ -32,6 +32,9 @@ export interface NotesChangedEvent {
   kind: "created" | "updated" | "renamed" | "moved" | "deleted" | "replaced";
   nodeKind?: NoteNodeKind;
   ids: string[];
+  folders?: NoteFolder[];
+  notes?: NoteSummary[];
+  treeChanged?: boolean;
 }
 
 export interface DeleteNoteNodeResult {

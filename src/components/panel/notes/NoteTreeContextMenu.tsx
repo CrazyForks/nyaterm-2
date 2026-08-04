@@ -16,6 +16,7 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
 import type { NoteTreeNode } from "@/types/notes";
+import type { NoteTreeRow } from "./noteTreeUtils";
 
 export interface NoteTreeMenuLabels {
   open: string;
@@ -32,7 +33,7 @@ export interface NoteTreeMenuLabels {
 
 interface NoteTreeContextMenuProps {
   node: NoteTreeNode | null;
-  folders: NoteTreeNode[];
+  folderTargets: NoteTreeRow[];
   labels: NoteTreeMenuLabels;
   onOpen: (node: NoteTreeNode) => void;
   onCreateNote: (parentId: string | null) => void;
@@ -43,26 +44,13 @@ interface NoteTreeContextMenuProps {
   onRefresh: () => void;
 }
 
-function flattenFolders(
-  nodes: NoteTreeNode[],
-  depth = 0,
-): Array<{ node: NoteTreeNode; depth: number }> {
-  const result: Array<{ node: NoteTreeNode; depth: number }> = [];
-  for (const node of nodes) {
-    if (node.kind !== "folder") continue;
-    result.push({ node, depth });
-    result.push(...flattenFolders(node.children, depth + 1));
-  }
-  return result;
-}
-
 function containsNode(node: NoteTreeNode, targetId: string): boolean {
   return node.children.some((child) => child.id === targetId || containsNode(child, targetId));
 }
 
 export default function NoteTreeContextMenu({
   node,
-  folders,
+  folderTargets,
   labels,
   onOpen,
   onCreateNote,
@@ -73,7 +61,7 @@ export default function NoteTreeContextMenu({
   onRefresh,
 }: NoteTreeContextMenuProps) {
   const parentId = node?.kind === "folder" ? node.id : (node?.parentId ?? null);
-  const folderTargets = flattenFolders(folders).filter(
+  const moveTargets = folderTargets.filter(
     (item) =>
       item.node.id !== node?.id && !(node?.kind === "folder" && containsNode(node, item.node.id)),
   );
@@ -111,7 +99,7 @@ export default function NoteTreeContextMenu({
             </ContextMenuSubTrigger>
             <ContextMenuSubContent className="max-h-72 min-w-44 overflow-y-auto">
               <ContextMenuItem onClick={() => onMove(node, null)}>{labels.root}</ContextMenuItem>
-              {folderTargets.map(({ node: folder, depth }) => (
+              {moveTargets.map(({ node: folder, depth }) => (
                 <ContextMenuItem key={folder.id} onClick={() => onMove(node, folder.id)}>
                   <span style={{ paddingLeft: depth * 10 }}>{folder.name}</span>
                 </ContextMenuItem>

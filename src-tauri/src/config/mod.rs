@@ -43,8 +43,8 @@ pub use key::{
 };
 #[allow(unused_imports)]
 pub use note::{
-    DeleteNoteNodeResult, NoteDocument, NoteFolder, NoteSummary, NoteTreePayload,
-    NotesChangedEvent, NotesSnapshot,
+    DeleteNoteNodeResult, NoteDocument, NoteFolder, NoteNodeChange, NoteSummary, NoteTreePayload,
+    NoteUpdateResult, NotesChangedEvent, NotesSnapshot,
 };
 #[allow(unused_imports)]
 pub use otp::{OtpConfig, OtpEntry, load_otp_entries, load_otp_entry_by_id, save_otp_entries};

@@ -14,6 +14,41 @@ import type {
   NoteTreePayload,
 } from "@/types/notes";
 
+function upsertFolders(current: NoteFolder[], incoming: NoteFolder[]) {
+  if (incoming.length === 0) return current;
+  const byId = new Map(current.map((folder) => [folder.id, folder]));
+  let changed = false;
+  for (const folder of incoming) {
+    const previous = byId.get(folder.id);
+    if (previous !== folder) {
+      byId.set(folder.id, folder);
+      changed = true;
+    }
+  }
+  return changed ? Array.from(byId.values()) : current;
+}
+
+function upsertNotes(current: NoteSummary[], incoming: NoteSummary[]) {
+  if (incoming.length === 0) return current;
+  const byId = new Map(current.map((note) => [note.id, note]));
+  let changed = false;
+  for (const note of incoming) {
+    const previous = byId.get(note.id);
+    if (
+      !previous ||
+      previous.parent_id !== note.parent_id ||
+      previous.title !== note.title ||
+      previous.sort_order !== note.sort_order ||
+      previous.revision !== note.revision ||
+      previous.updated_at_ms !== note.updated_at_ms
+    ) {
+      byId.set(note.id, note);
+      changed = true;
+    }
+  }
+  return changed ? Array.from(byId.values()) : current;
+}
+
 export function useNotesTree() {
   const { appSettings, updateUi } = useApp();
   const [folders, setFolders] = useState<NoteFolder[]>([]);
@@ -56,29 +91,26 @@ export function useNotesTree() {
     let unlisten: (() => void) | undefined;
     listenNotesChanged((event) => {
       if (disposed) return;
-      if (event.kind === "updated" && event.nodeKind === "note" && event.ids.length === 1) {
-        void invoke<NoteDocument>("get_note", { noteId: event.ids[0] })
-          .then((note) => {
-            setNotes((current) =>
-              current.map((item) =>
-                item.id === note.id
-                  ? {
-                      id: note.id,
-                      parent_id: note.parent_id,
-                      title: note.title,
-                      sort_order: note.sort_order,
-                      revision: note.revision,
-                      created_at_ms: note.created_at_ms,
-                      updated_at_ms: note.updated_at_ms,
-                    }
-                  : item,
-              ),
-            );
-          })
-          .catch(() => refresh());
+      if (event.kind === "replaced") {
+        void refresh();
         return;
       }
-      void refresh();
+      if (event.kind === "deleted") {
+        const ids = new Set(event.ids);
+        setFolders((current) => current.filter((folder) => !ids.has(folder.id)));
+        setNotes((current) => current.filter((note) => !ids.has(note.id)));
+        return;
+      }
+      if (event.kind === "updated" && event.treeChanged === false) return;
+      if ((event.folders?.length ?? 0) > 0) {
+        setFolders((current) => upsertFolders(current, event.folders ?? []));
+      }
+      if ((event.notes?.length ?? 0) > 0) {
+        setNotes((current) => upsertNotes(current, event.notes ?? []));
+      }
+      if ((event.folders?.length ?? 0) === 0 && (event.notes?.length ?? 0) === 0) {
+        void refresh();
+      }
     })
       .then((dispose) => {
         unlisten = dispose;
@@ -110,50 +142,62 @@ export function useNotesTree() {
   const createFolder = useCallback(
     async (parentId: string | null, name?: string) => {
       const folder = await invoke<NoteFolder>("create_note_folder", { parentId, name });
+      setFolders((current) => upsertFolders(current, [folder]));
       setSelectedNodeId(folder.id);
       setExpandedFolderIds(new Set([...expandedFolderIds, ...(parentId ? [parentId] : [])]));
-      await refresh();
       return folder;
     },
-    [expandedFolderIds, refresh, setExpandedFolderIds, setSelectedNodeId],
+    [expandedFolderIds, setExpandedFolderIds, setSelectedNodeId],
   );
 
   const createNote = useCallback(
     async (parentId: string | null, title?: string, markdown?: string) => {
       const note = await invoke<NoteDocument>("create_note", { parentId, title, markdown });
+      setNotes((current) =>
+        upsertNotes(current, [
+          {
+            id: note.id,
+            parent_id: note.parent_id,
+            title: note.title,
+            sort_order: note.sort_order,
+            revision: note.revision,
+            created_at_ms: note.created_at_ms,
+            updated_at_ms: note.updated_at_ms,
+          },
+        ]),
+      );
       setSelectedNodeId(note.id);
       setExpandedFolderIds(new Set([...expandedFolderIds, ...(parentId ? [parentId] : [])]));
-      await refresh();
       return note;
     },
-    [expandedFolderIds, refresh, setExpandedFolderIds, setSelectedNodeId],
+    [expandedFolderIds, setExpandedFolderIds, setSelectedNodeId],
   );
 
   const renameNode = useCallback(
     async (nodeKind: NoteNodeKind, nodeId: string, name: string) => {
       await invoke("rename_note_node", { nodeKind, nodeId, name });
-      await refresh();
     },
-    [refresh],
+    [],
   );
 
   const moveNode = useCallback(
     async (nodeKind: NoteNodeKind, nodeId: string, parentId: string | null, sortOrder: number) => {
       await invoke("move_note_node", { nodeKind, nodeId, parentId, sortOrder });
       if (parentId) setExpandedFolderIds(new Set([...expandedFolderIds, parentId]));
-      await refresh();
     },
-    [expandedFolderIds, refresh, setExpandedFolderIds],
+    [expandedFolderIds, setExpandedFolderIds],
   );
 
   const deleteNode = useCallback(
     async (nodeKind: NoteNodeKind, nodeId: string) => {
       const result = await invoke<DeleteNoteNodeResult>("delete_note_node", { nodeKind, nodeId });
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
-      await refresh();
+      const ids = new Set(result.ids);
+      setFolders((current) => current.filter((folder) => !ids.has(folder.id)));
+      setNotes((current) => current.filter((note) => !ids.has(note.id)));
       return result;
     },
-    [refresh, selectedNodeId, setSelectedNodeId],
+    [selectedNodeId, setSelectedNodeId],
   );
 
   const runAction = useCallback(async (action: () => Promise<unknown>) => {

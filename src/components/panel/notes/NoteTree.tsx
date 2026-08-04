@@ -1,13 +1,17 @@
-import type React from "react";
+import { useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import type { NoteTreeNode } from "@/types/notes";
 import NoteTreeContextMenu, { type NoteTreeMenuLabels } from "./NoteTreeContextMenu";
 import NoteTreeItem from "./NoteTreeItem";
+import type { NoteTreeRow } from "./noteTreeUtils";
+
+const NOTE_TREE_ROW_HEIGHT = 28;
 
 interface NoteTreeProps {
-  nodes: NoteTreeNode[];
-  folders: NoteTreeNode[];
+  rows: NoteTreeRow[];
+  folderTargets: NoteTreeRow[];
   selectedNodeId: string | null;
   expandedFolderIds: Set<string>;
   editingNodeId: string | null;
@@ -32,56 +36,75 @@ interface NoteTreeProps {
   onDropRoot: (event: DragEvent<HTMLDivElement>) => void;
 }
 
-function renderNodes(props: NoteTreeProps, nodes: NoteTreeNode[], depth: number): React.ReactNode {
-  return nodes.map((node) => (
-    <div key={node.id}>
-      <NoteTreeItem
-        node={node}
-        depth={depth}
-        folders={props.folders}
-        selected={props.selectedNodeId === node.id}
-        expanded={props.expandedFolderIds.has(node.id)}
-        editing={props.editingNodeId === node.id}
-        dragOver={props.dragOverNodeId === node.id}
-        labels={props.labels}
-        onSelect={props.onSelect}
-        onToggle={props.onToggle}
-        onOpen={props.onOpen}
-        onRenameStart={props.onRenameStart}
-        onRenameSubmit={props.onRenameSubmit}
-        onRenameCancel={props.onRenameCancel}
-        onCreateNote={props.onCreateNote}
-        onCreateFolder={props.onCreateFolder}
-        onMove={props.onMove}
-        onDelete={props.onDelete}
-        onRefresh={props.onRefresh}
-        onDragStartNode={props.onDragStartNode}
-        onDragOverNode={props.onDragOverNode}
-        onDropNode={props.onDropNode}
-        onDragEnd={props.onDragEnd}
-      />
-      {node.kind === "folder" && props.expandedFolderIds.has(node.id)
-        ? renderNodes(props, node.children, depth + 1)
-        : null}
-    </div>
-  ));
-}
-
 export default function NoteTree(props: NoteTreeProps) {
+  const scrollParentRef = useRef<HTMLDivElement | null>(null);
+  const [contextNode, setContextNode] = useState<NoteTreeNode | null>(null);
+  const nodeById = useMemo(
+    () => new Map(props.rows.map(({ node }) => [node.id, node])),
+    [props.rows],
+  );
+  const rowVirtualizer = useVirtualizer({
+    count: props.rows.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => NOTE_TREE_ROW_HEIGHT,
+    overscan: 8,
+  });
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          className="terminal-scroll flex-1 space-y-0.5 overflow-auto p-1.5 text-xs"
+          ref={scrollParentRef}
+          className="terminal-scroll h-full min-h-0 flex-1 overflow-auto p-1.5 text-xs"
+          onContextMenu={(event) => {
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            const item = target?.closest<HTMLElement>("[data-note-node-id]");
+            setContextNode(item ? (nodeById.get(item.dataset.noteNodeId ?? "") ?? null) : null);
+          }}
           onDragOver={props.onDragOverRoot}
           onDrop={props.onDropRoot}
         >
-          {renderNodes(props, props.nodes, 0)}
+          <div className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = props.rows[virtualRow.index];
+              if (!row) return null;
+              const { node, depth } = row;
+              return (
+                <div
+                  key={virtualRow.key}
+                  className="absolute left-0 top-0 w-full"
+                  style={{
+                    height: virtualRow.size,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <NoteTreeItem
+                    node={node}
+                    depth={depth}
+                    selected={props.selectedNodeId === node.id}
+                    expanded={props.expandedFolderIds.has(node.id)}
+                    editing={props.editingNodeId === node.id}
+                    dragOver={props.dragOverNodeId === node.id}
+                    labels={props.labels}
+                    onSelect={props.onSelect}
+                    onToggle={props.onToggle}
+                    onOpen={props.onOpen}
+                    onRenameSubmit={props.onRenameSubmit}
+                    onRenameCancel={props.onRenameCancel}
+                    onDragStartNode={props.onDragStartNode}
+                    onDragOverNode={props.onDragOverNode}
+                    onDropNode={props.onDropNode}
+                    onDragEnd={props.onDragEnd}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       </ContextMenuTrigger>
       <NoteTreeContextMenu
-        node={null}
-        folders={props.folders}
+        node={contextNode}
+        folderTargets={props.folderTargets}
         labels={props.labels}
         onOpen={props.onOpen}
         onCreateNote={props.onCreateNote}

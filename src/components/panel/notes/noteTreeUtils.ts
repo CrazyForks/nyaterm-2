@@ -1,5 +1,10 @@
 import type { NoteFolder, NoteNodeKind, NoteSummary, NoteTreeNode } from "@/types/notes";
 
+export interface NoteTreeRow {
+  node: NoteTreeNode;
+  depth: number;
+}
+
 export function buildNoteTree(folders: NoteFolder[], notes: NoteSummary[]): NoteTreeNode[] {
   const nodes = new Map<string, NoteTreeNode>();
   const roots: NoteTreeNode[] = [];
@@ -45,6 +50,19 @@ export function buildNoteTree(folders: NoteFolder[], notes: NoteSummary[]): Note
   return roots;
 }
 
+export function filterNoteTree(nodes: NoteTreeNode[], keyword: string): NoteTreeNode[] {
+  if (!keyword) return nodes;
+  const normalized = keyword.toLowerCase();
+  const visit = (node: NoteTreeNode): NoteTreeNode | null => {
+    const children = node.children.map(visit).filter((item): item is NoteTreeNode => Boolean(item));
+    if (node.name.toLowerCase().includes(normalized) || children.length > 0) {
+      return { ...node, children };
+    }
+    return null;
+  };
+  return nodes.map(visit).filter((item): item is NoteTreeNode => Boolean(item));
+}
+
 export function compareNoteNodes(left: NoteTreeNode, right: NoteTreeNode) {
   if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
   if (left.kind !== right.kind) return left.kind === "folder" ? -1 : 1;
@@ -57,17 +75,30 @@ export function compareNoteNodes(left: NoteTreeNode, right: NoteTreeNode) {
 export function flattenVisibleNoteTree(
   nodes: NoteTreeNode[],
   expandedFolderIds: Set<string>,
-): NoteTreeNode[] {
-  const result: NoteTreeNode[] = [];
-  const visit = (items: NoteTreeNode[]) => {
+): NoteTreeRow[] {
+  const result: NoteTreeRow[] = [];
+  const visit = (items: NoteTreeNode[], depth: number) => {
     for (const item of items) {
-      result.push(item);
+      result.push({ node: item, depth });
       if (item.kind === "folder" && expandedFolderIds.has(item.id)) {
-        visit(item.children);
+        visit(item.children, depth + 1);
       }
     }
   };
-  visit(nodes);
+  visit(nodes, 0);
+  return result;
+}
+
+export function flattenNoteFolders(nodes: NoteTreeNode[]): NoteTreeRow[] {
+  const result: NoteTreeRow[] = [];
+  const visit = (items: NoteTreeNode[], depth: number) => {
+    for (const item of items) {
+      if (item.kind !== "folder") continue;
+      result.push({ node: item, depth });
+      visit(item.children, depth + 1);
+    }
+  };
+  visit(nodes, 0);
   return result;
 }
 

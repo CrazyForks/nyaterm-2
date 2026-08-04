@@ -218,6 +218,10 @@ pub(crate) fn list_notes() -> AppResult<Vec<crate::config::NoteDocument>> {
     storage()?.list_notes()
 }
 
+pub(crate) fn list_note_summaries() -> AppResult<Vec<crate::config::NoteSummary>> {
+    storage()?.list_note_summaries()
+}
+
 pub(crate) fn get_note(note_id: &str) -> AppResult<Option<crate::config::NoteDocument>> {
     storage()?.get_note(note_id)
 }
@@ -243,11 +247,15 @@ pub(crate) fn update_note(
     markdown: String,
     expected_revision: u64,
     force: bool,
-) -> AppResult<crate::config::NoteDocument> {
+) -> AppResult<crate::config::NoteUpdateResult> {
     storage()?.update_note(note_id, title, markdown, expected_revision, force)
 }
 
-pub(crate) fn rename_note_node(node_kind: &str, node_id: &str, name: String) -> AppResult<()> {
+pub(crate) fn rename_note_node(
+    node_kind: &str,
+    node_id: &str,
+    name: String,
+) -> AppResult<crate::config::NoteNodeChange> {
     storage()?.rename_note_node(node_kind, node_id, name)
 }
 
@@ -256,7 +264,7 @@ pub(crate) fn move_note_node(
     node_id: &str,
     parent_id: Option<String>,
     sort_order: i64,
-) -> AppResult<()> {
+) -> AppResult<crate::config::NoteNodeChange> {
     storage()?.move_note_node(node_kind, node_id, parent_id, sort_order)
 }
 

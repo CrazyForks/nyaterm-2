@@ -166,6 +166,8 @@ impl Storage {
         txn.open_table(KNOWN_HOSTS_TABLE).map_err(storage_error)?;
         txn.open_table(NOTE_FOLDERS_TABLE).map_err(storage_error)?;
         txn.open_table(NOTES_TABLE).map_err(storage_error)?;
+        txn.open_table(NOTE_SUMMARIES_TABLE)
+            .map_err(storage_error)?;
         Ok(())
     }
 
@@ -191,6 +193,8 @@ pub(super) fn open_all_v3_tables(txn: &redb::WriteTransaction) -> AppResult<()> 
         .map_err(storage_error)?;
     txn.open_table(NOTE_FOLDERS_TABLE).map_err(storage_error)?;
     txn.open_table(NOTES_TABLE).map_err(storage_error)?;
+    txn.open_table(NOTE_SUMMARIES_TABLE)
+        .map_err(storage_error)?;
     txn.open_table(IDX_CONNECTIONS_BY_GROUP_TABLE)
         .map_err(storage_error)?;
     txn.open_table(IDX_CONNECTIONS_BY_LAST_USED_TABLE)

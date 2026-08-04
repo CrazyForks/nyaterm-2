@@ -58,6 +58,9 @@ pub async fn apply_portable_snapshot(
             kind: "replaced".to_string(),
             node_kind: None,
             ids: Vec::new(),
+            folders: Vec::new(),
+            notes: Vec::new(),
+            tree_changed: Some(true),
         },
     );
 

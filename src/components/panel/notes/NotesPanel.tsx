@@ -1,4 +1,11 @@
-import { type DragEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
+import {
+  type DragEvent,
+  type KeyboardEvent,
+  useDeferredValue,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { MdAdd, MdCreateNewFolder, MdDescription } from "react-icons/md";
 import {
@@ -20,24 +27,13 @@ import NoteTree from "./NoteTree";
 import {
   buildNoteTree,
   collectSiblingNames,
+  filterNoteTree,
   findNoteNode,
+  flattenNoteFolders,
   flattenVisibleNoteTree,
   isDescendantFolder,
   validateNoteInputName,
 } from "./noteTreeUtils";
-
-function filterTree(nodes: NoteTreeNode[], keyword: string): NoteTreeNode[] {
-  if (!keyword) return nodes;
-  const normalized = keyword.toLowerCase();
-  const visit = (node: NoteTreeNode): NoteTreeNode | null => {
-    const children = node.children.map(visit).filter((item): item is NoteTreeNode => Boolean(item));
-    if (node.name.toLowerCase().includes(normalized) || children.length > 0) {
-      return { ...node, children };
-    }
-    return null;
-  };
-  return nodes.map(visit).filter((item): item is NoteTreeNode => Boolean(item));
-}
 
 function countFolderContents(node: NoteTreeNode) {
   let folders = 0;
@@ -77,15 +73,19 @@ export default function NotesPanel() {
   const [deleteTarget, setDeleteTarget] = useState<NoteTreeNode | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const dragSourceRef = useRef<NoteTreeNode | null>(null);
+  const deferredSearch = useDeferredValue(search);
 
   const tree = useMemo(() => buildNoteTree(folders, notes), [folders, notes]);
-  const visibleTree = useMemo(() => filterTree(tree, search.trim()), [tree, search]);
-  const visibleNodes = useMemo(
+  const visibleTree = useMemo(
+    () => filterNoteTree(tree, deferredSearch.trim()),
+    [tree, deferredSearch],
+  );
+  const visibleRows = useMemo(
     () => flattenVisibleNoteTree(visibleTree, expandedFolderIds),
     [expandedFolderIds, visibleTree],
   );
   const selectedNode = useMemo(() => findNoteNode(tree, selectedNodeId), [selectedNodeId, tree]);
-  const folderNodes = useMemo(() => tree.filter((node) => node.kind === "folder"), [tree]);
+  const folderTargets = useMemo(() => flattenNoteFolders(tree), [tree]);
 
   const labels = {
     open: t("notes.open"),
@@ -169,9 +169,9 @@ export default function NotesPanel() {
       setDeleteTarget(selectedNode);
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      const index = visibleNodes.findIndex((node) => node.id === selectedNode.id);
+      const index = visibleRows.findIndex(({ node }) => node.id === selectedNode.id);
       const nextIndex = event.key === "ArrowDown" ? index + 1 : index - 1;
-      const next = visibleNodes[Math.max(0, Math.min(visibleNodes.length - 1, nextIndex))];
+      const next = visibleRows[Math.max(0, Math.min(visibleRows.length - 1, nextIndex))]?.node;
       if (next) setSelectedNodeId(next.id);
     }
   };
@@ -189,7 +189,7 @@ export default function NotesPanel() {
     }
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    setDragOverNodeId(node.id);
+    setDragOverNodeId((current) => (current === node.id ? current : node.id));
   };
 
   const handleDropNode = (event: DragEvent<HTMLDivElement>, node: NoteTreeNode) => {
@@ -272,8 +272,8 @@ export default function NotesPanel() {
           </div>
         ) : (
           <NoteTree
-            nodes={visibleTree}
-            folders={folderNodes}
+            rows={visibleRows}
+            folderTargets={folderTargets}
             selectedNodeId={selectedNodeId}
             expandedFolderIds={expandedFolderIds}
             editingNodeId={editingNodeId}

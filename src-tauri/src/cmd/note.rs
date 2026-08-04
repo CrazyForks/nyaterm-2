@@ -1,5 +1,5 @@
 use crate::config::{
-    DeleteNoteNodeResult, NoteDocument, NoteSummary, NoteTreePayload, NotesChangedEvent,
+    DeleteNoteNodeResult, NoteDocument, NoteFolder, NoteSummary, NoteTreePayload, NotesChangedEvent,
 };
 use crate::error::{AppError, AppResult};
 use tauri::Emitter;
@@ -15,11 +15,17 @@ fn emit_notes_changed(
     kind: &str,
     node_kind: Option<&str>,
     ids: Vec<String>,
+    folders: Vec<NoteFolder>,
+    notes: Vec<NoteSummary>,
+    tree_changed: Option<bool>,
 ) {
     let payload = NotesChangedEvent {
         kind: kind.to_string(),
         node_kind: node_kind.map(str::to_string),
         ids,
+        folders,
+        notes,
+        tree_changed,
     };
     let _ = app.emit("notes-changed", payload);
 }
@@ -27,10 +33,7 @@ fn emit_notes_changed(
 #[tauri::command]
 pub fn list_note_tree() -> AppResult<NoteTreePayload> {
     let folders = crate::storage::list_note_folders()?;
-    let notes = crate::storage::list_notes()?
-        .into_iter()
-        .map(NoteSummary::from)
-        .collect();
+    let notes = crate::storage::list_note_summaries()?;
     Ok(NoteTreePayload { folders, notes })
 }
 
@@ -47,7 +50,15 @@ pub fn create_note_folder(
     name: Option<String>,
 ) -> AppResult<crate::config::NoteFolder> {
     let folder = crate::storage::create_note_folder(parent_id, name)?;
-    emit_notes_changed(&app, "created", Some("folder"), vec![folder.id.clone()]);
+    emit_notes_changed(
+        &app,
+        "created",
+        Some("folder"),
+        vec![folder.id.clone()],
+        vec![folder.clone()],
+        Vec::new(),
+        Some(true),
+    );
     schedule_cloud_sync_notify(app);
     Ok(folder)
 }
@@ -60,7 +71,15 @@ pub fn create_note(
     markdown: Option<String>,
 ) -> AppResult<NoteDocument> {
     let note = crate::storage::create_note(parent_id, title, markdown)?;
-    emit_notes_changed(&app, "created", Some("note"), vec![note.id.clone()]);
+    emit_notes_changed(
+        &app,
+        "created",
+        Some("note"),
+        vec![note.id.clone()],
+        Vec::new(),
+        vec![NoteSummary::from(note.clone())],
+        Some(true),
+    );
     schedule_cloud_sync_notify(app);
     Ok(note)
 }
@@ -74,16 +93,26 @@ pub fn update_note(
     expected_revision: u64,
     force: Option<bool>,
 ) -> AppResult<NoteDocument> {
-    let note = crate::storage::update_note(
+    let result = crate::storage::update_note(
         &note_id,
         title,
         markdown,
         expected_revision,
         force.unwrap_or(false),
     )?;
-    emit_notes_changed(&app, "updated", Some("note"), vec![note.id.clone()]);
-    schedule_cloud_sync_notify(app);
-    Ok(note)
+    if result.changed {
+        emit_notes_changed(
+            &app,
+            "updated",
+            Some("note"),
+            vec![result.note.id.clone()],
+            Vec::new(),
+            vec![NoteSummary::from(result.note.clone())],
+            Some(result.tree_changed),
+        );
+        schedule_cloud_sync_notify(app);
+    }
+    Ok(result.note)
 }
 
 #[tauri::command]
@@ -93,9 +122,19 @@ pub fn rename_note_node(
     node_id: String,
     name: String,
 ) -> AppResult<()> {
-    crate::storage::rename_note_node(&node_kind, &node_id, name)?;
-    emit_notes_changed(&app, "renamed", Some(&node_kind), vec![node_id]);
-    schedule_cloud_sync_notify(app);
+    let result = crate::storage::rename_note_node(&node_kind, &node_id, name)?;
+    if result.changed {
+        emit_notes_changed(
+            &app,
+            "renamed",
+            Some(&node_kind),
+            vec![node_id],
+            result.folder.into_iter().collect(),
+            result.note.into_iter().collect(),
+            Some(result.tree_changed),
+        );
+        schedule_cloud_sync_notify(app);
+    }
     Ok(())
 }
 
@@ -107,9 +146,19 @@ pub fn move_note_node(
     parent_id: Option<String>,
     sort_order: i64,
 ) -> AppResult<()> {
-    crate::storage::move_note_node(&node_kind, &node_id, parent_id, sort_order)?;
-    emit_notes_changed(&app, "moved", Some(&node_kind), vec![node_id]);
-    schedule_cloud_sync_notify(app);
+    let result = crate::storage::move_note_node(&node_kind, &node_id, parent_id, sort_order)?;
+    if result.changed {
+        emit_notes_changed(
+            &app,
+            "moved",
+            Some(&node_kind),
+            vec![node_id],
+            result.folder.into_iter().collect(),
+            result.note.into_iter().collect(),
+            Some(result.tree_changed),
+        );
+        schedule_cloud_sync_notify(app);
+    }
     Ok(())
 }
 
@@ -120,7 +169,17 @@ pub fn delete_note_node(
     node_id: String,
 ) -> AppResult<DeleteNoteNodeResult> {
     let result = crate::storage::delete_note_node(&node_kind, &node_id)?;
-    emit_notes_changed(&app, "deleted", Some(&node_kind), result.ids.clone());
-    schedule_cloud_sync_notify(app);
+    if result.folder_count > 0 || result.note_count > 0 {
+        emit_notes_changed(
+            &app,
+            "deleted",
+            Some(&node_kind),
+            result.ids.clone(),
+            Vec::new(),
+            Vec::new(),
+            Some(true),
+        );
+        schedule_cloud_sync_notify(app);
+    }
     Ok(result)
 }
