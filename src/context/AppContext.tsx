@@ -335,6 +335,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     language: "en",
     header_status_mode: "session",
     header_status_visible: true,
+    show_notes_panel: true,
     show_remote_stats: true,
     remote_stats_interval: 3,
     show_gpu_monitor: false,

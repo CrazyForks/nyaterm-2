@@ -495,6 +495,7 @@ export interface UiConfig {
   language?: string;
   header_status_mode?: HeaderStatusMode;
   header_status_visible?: boolean;
+  show_notes_panel: boolean;
   show_remote_stats: boolean;
   remote_stats_interval: number;
   show_gpu_monitor: boolean;
