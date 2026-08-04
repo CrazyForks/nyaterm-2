@@ -2075,6 +2075,7 @@
     "showInSearchMenu": "검색 메뉴에 표시",
     "showLineNumbers": "줄 번호",
     "showLineNumbersDesc": "터미널 여백에 줄 번호를 표시합니다.",
+    "showNotesPanel": "노트",
     "showPassphrase": "암호 표시",
     "showProcessManager": "프로세스 관리",
     "showProcessManagerDesc": "활성 SSH 호스트에서 프로세스를 표시하고 관리합니다.",

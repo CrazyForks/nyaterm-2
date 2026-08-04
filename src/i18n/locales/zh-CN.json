@@ -2078,6 +2078,7 @@
     "showInSearchMenu": "在搜索菜单显示",
     "showLineNumbers": "显示行号",
     "showLineNumbersDesc": "在终端侧边栏显示每行的行号。",
+    "showNotesPanel": "显示笔记",
     "showPassphrase": "显示口令",
     "showProcessManager": "显示进程管理",
     "showProcessManagerDesc": "查看并管理当前 SSH 主机上的进程。",

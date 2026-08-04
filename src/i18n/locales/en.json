@@ -2079,6 +2079,7 @@
     "showInSearchMenu": "Show in search menu",
     "showLineNumbers": "Line Numbers",
     "showLineNumbersDesc": "Display line numbers in the terminal gutter.",
+    "showNotesPanel": "Notes",
     "showPassphrase": "Show passphrase",
     "showProcessManager": "Process Management",
     "showProcessManagerDesc": "Show and manage processes on the active SSH host.",

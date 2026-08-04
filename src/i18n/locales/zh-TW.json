@@ -2073,6 +2073,7 @@
     "showInSearchMenu": "在搜尋選單顯示",
     "showLineNumbers": "顯示行號",
     "showLineNumbersDesc": "在終端側邊欄顯示每行的行號。",
+    "showNotesPanel": "顯示筆記",
     "showPassphrase": "顯示密碼片語",
     "showProcessManager": "顯示處理程序管理",
     "showProcessManagerDesc": "檢視並管理目前 SSH 主機上的處理程序。",
