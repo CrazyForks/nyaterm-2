@@ -534,8 +534,10 @@ export interface RemoteStatsLoad {
 export interface RemoteStatsCpu {
   model: string;
   cores: number;
-  usage: number;
-  per_core: number[];
+  usage: number | null;
+  per_core: { id: number; usage: number }[];
+  sample_window_ms: number | null;
+  usage_source: "warming_up" | "aggregate" | "core_weighted_fallback";
 }
 
 export interface RemoteStatsMemory {

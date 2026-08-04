@@ -200,7 +200,8 @@ function HeaderStatusDivider() {
   );
 }
 
-function formatPct(value: number): string {
+function formatPct(value: number | null): string {
+  if (value == null) return "--";
   return `${Math.round(Math.min(100, Math.max(0, value)))}%`;
 }
 
@@ -216,7 +217,8 @@ function formatRate(bytesPerSec: number): string {
   return `${formatBytes(bytesPerSec)}/s`;
 }
 
-function getPressureColor(usagePercent: number): string | undefined {
+function getPressureColor(usagePercent: number | null): string | undefined {
+  if (usagePercent == null) return undefined;
   if (usagePercent >= 90) return "#f87171";
   if (usagePercent >= 75) return "#f59e0b";
   return undefined;

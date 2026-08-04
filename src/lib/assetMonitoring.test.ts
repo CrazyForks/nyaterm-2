@@ -125,6 +125,8 @@ function remoteStats(): RemoteStats {
       cores: 32,
       usage: 12,
       per_core: [],
+      sample_window_ms: 1000,
+      usage_source: "aggregate",
     },
     memory: {
       used: 32 * 1024 ** 3,
