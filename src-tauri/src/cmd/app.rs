@@ -113,15 +113,12 @@ pub struct AppSupportInfo {
 
 #[tauri::command]
 pub fn get_support_info(state: tauri::State<'_, crate::runtime::AppRuntime>) -> AppSupportInfo {
+    let runtime = state.info().mode;
     AppSupportInfo {
         os: operating_system_label(),
         architecture: std::env::consts::ARCH.to_string(),
-        runtime: support_runtime_label(state.portable()).to_string(),
+        runtime,
     }
-}
-
-fn support_runtime_label(portable: bool) -> &'static str {
-    if portable { "portable" } else { "installed" }
 }
 
 fn operating_system_label() -> String {
@@ -132,8 +129,7 @@ fn operating_system_label() -> String {
 
     #[cfg(target_os = "macos")]
     {
-        return command_output("sw_vers", &["-productName", "-productVersion"])
-            .unwrap_or_else(|| "macOS".to_string());
+        return macos_version_label();
     }
 
     #[cfg(target_os = "linux")]
@@ -158,20 +154,37 @@ fn operating_system_label() -> String {
 
 #[cfg(target_os = "windows")]
 fn windows_version_label() -> String {
-    use windows::Wdk::System::SystemServices::RtlGetVersion;
-    use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+    use windows::Win32::System::SystemInformation::OSVERSIONINFOEXW;
+    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 
-    let mut version = OSVERSIONINFOW {
-        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+    const VER_NT_WORKSTATION: u8 = 1;
+    type RtlGetVersion = unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32;
+
+    let mut version = OSVERSIONINFOEXW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOEXW>() as u32,
         ..Default::default()
     };
 
+    let Some(rtl_get_version) = (unsafe {
+        let ntdll = GetModuleHandleA(c"ntdll.dll".as_ptr().cast());
+        if ntdll.is_null() {
+            None
+        } else {
+            GetProcAddress(ntdll, c"RtlGetVersion".as_ptr().cast())
+        }
+    }) else {
+        return "Windows".to_string();
+    };
+
+    let rtl_get_version: RtlGetVersion = unsafe { std::mem::transmute(rtl_get_version) };
+
     // RtlGetVersion queries the current Windows version in-process, avoiding a console process.
-    if unsafe { RtlGetVersion(&mut version) }.is_ok() {
+    if unsafe { rtl_get_version(&mut version) } >= 0 {
         windows_version_label_from_parts(
             version.dwMajorVersion,
             version.dwMinorVersion,
             version.dwBuildNumber,
+            version.wProductType == VER_NT_WORKSTATION,
         )
     } else {
         "Windows".to_string()
@@ -179,7 +192,16 @@ fn windows_version_label() -> String {
 }
 
 #[cfg(any(target_os = "windows", test))]
-fn windows_version_label_from_parts(major: u32, minor: u32, build: u32) -> String {
+fn windows_version_label_from_parts(
+    major: u32,
+    minor: u32,
+    build: u32,
+    workstation: bool,
+) -> String {
+    if !workstation {
+        return format!("Windows Server ({major}.{minor}.{build})");
+    }
+
     let name = match (major, minor, build) {
         (10, 0, 22_000..) => "Windows 11",
         (10, 0, _) => "Windows 10",
@@ -189,6 +211,22 @@ fn windows_version_label_from_parts(major: u32, minor: u32, build: u32) -> Strin
         _ => "Windows",
     };
     format!("{name} ({major}.{minor}.{build})")
+}
+
+#[cfg(target_os = "macos")]
+fn macos_version_label() -> String {
+    let name = command_output("sw_vers", &["-productName"]).unwrap_or_else(|| "macOS".to_string());
+    command_output("sw_vers", &["-productVersion"])
+        .map(|version| format!("{name} {version}"))
+        .unwrap_or(name)
+}
+
+#[cfg(test)]
+fn macos_version_label_from_parts(name: Option<&str>, version: Option<&str>) -> String {
+    let name = name.unwrap_or("macOS");
+    version
+        .map(|version| format!("{name} {version}"))
+        .unwrap_or_else(|| name.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -206,24 +244,36 @@ fn command_output(program: &str, args: &[&str]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{support_runtime_label, windows_version_label_from_parts};
-
-    #[test]
-    fn support_runtime_label_matches_installation_mode() {
-        assert_eq!(support_runtime_label(true), "portable");
-        assert_eq!(support_runtime_label(false), "installed");
-    }
+    use super::{macos_version_label_from_parts, windows_version_label_from_parts};
 
     #[test]
     fn windows_version_label_uses_native_version_parts() {
         assert_eq!(
-            windows_version_label_from_parts(10, 0, 22_631),
+            windows_version_label_from_parts(10, 0, 22_631, true),
             "Windows 11 (10.0.22631)"
         );
         assert_eq!(
-            windows_version_label_from_parts(10, 0, 19_045),
+            windows_version_label_from_parts(10, 0, 19_045, true),
             "Windows 10 (10.0.19045)"
         );
+        assert_eq!(
+            windows_version_label_from_parts(10, 0, 20_348, false),
+            "Windows Server (10.0.20348)"
+        );
+        assert_eq!(
+            windows_version_label_from_parts(10, 0, 26_100, false),
+            "Windows Server (10.0.26100)"
+        );
+    }
+
+    #[test]
+    fn macos_version_label_combines_available_parts() {
+        assert_eq!(
+            macos_version_label_from_parts(Some("macOS"), Some("14.7.1")),
+            "macOS 14.7.1"
+        );
+        assert_eq!(macos_version_label_from_parts(Some("macOS"), None), "macOS");
+        assert_eq!(macos_version_label_from_parts(None, None), "macOS");
     }
 }
 

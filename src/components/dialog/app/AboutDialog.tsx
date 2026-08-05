@@ -12,11 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import pkg from "../../../../package.json";
-import NyaTermLogo from "../../NyaTermLogo";
 import { writeClipboardText } from "@/lib/clipboard";
 import { invoke } from "@/lib/invoke";
 import type { AppSupportInfo } from "@/types/global";
+import pkg from "../../../../package.json";
+import NyaTermLogo from "../../NyaTermLogo";
 
 interface AboutDialogProps {
   open: boolean;
@@ -26,31 +26,61 @@ interface AboutDialogProps {
 export default function AboutDialog({ open, onClose }: AboutDialogProps) {
   const { t } = useTranslation();
   const [appName, setAppName] = useState("NyaTerm");
-  const [appVersion, setAppVersion] = useState("0.1.0");
-  const [supportInfo, setSupportInfo] = useState<AppSupportInfo>({
-    os: "unknown",
-    architecture: "unknown",
-    runtime: "installed",
-  });
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [appVersionFailed, setAppVersionFailed] = useState(false);
+  const [supportInfo, setSupportInfo] = useState<AppSupportInfo | null>(null);
+  const [supportInfoFailed, setSupportInfoFailed] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      getName().then(setAppName).catch(console.error);
-      getVersion().then(setAppVersion).catch(console.error);
-      invoke<AppSupportInfo>("get_support_info")
-        .then(setSupportInfo)
-        .catch(() => undefined);
-      setCopied(false);
+    if (!open) {
+      return;
     }
+
+    let cancelled = false;
+    setCopied(false);
+    setAppVersion(null);
+    setAppVersionFailed(false);
+    setSupportInfo(null);
+    setSupportInfoFailed(false);
+
+    getName()
+      .then((name) => {
+        if (!cancelled) setAppName(name);
+      })
+      .catch(() => undefined);
+
+    getVersion()
+      .then((version) => {
+        if (!cancelled) setAppVersion(version);
+      })
+      .catch(() => {
+        if (!cancelled) setAppVersionFailed(true);
+      });
+
+    invoke<AppSupportInfo>("get_support_info")
+      .then((info) => {
+        if (!cancelled) setSupportInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setSupportInfoFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const copySupportInfo = async () => {
+    if (!appVersion || !supportInfo) {
+      return;
+    }
+
     const text = [
       "NyaTerm Support Information",
       `Version: ${appVersion}`,
       `Operating System: ${supportInfo.os}`,
-      `Architecture: ${supportInfo.architecture}`,
+      `Application Architecture: ${supportInfo.architecture}`,
       `Runtime: ${supportInfo.runtime === "portable" ? t("about.portable") : t("about.installed")}`,
     ].join("\n");
     try {
@@ -63,11 +93,26 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
     }
   };
 
+  const supportInfoReady = Boolean(appVersion && supportInfo);
+  const versionDisplay =
+    appVersion ?? (appVersionFailed ? t("about.unknown") : t("common.loading"));
+  const osDisplay =
+    supportInfo?.os ?? (supportInfoFailed ? t("about.unknown") : t("common.loading"));
+  const architectureDisplay =
+    supportInfo?.architecture ?? (supportInfoFailed ? t("about.unknown") : t("common.loading"));
+  const runtimeDisplay = supportInfo
+    ? supportInfo.runtime === "portable"
+      ? t("about.portable")
+      : t("about.installed")
+    : supportInfoFailed
+      ? t("about.unknown")
+      : t("common.loading");
+
   const supportRows = [
-    [t("about.version"), appVersion],
-    [t("about.operatingSystem"), supportInfo.os === "unknown" ? t("about.unknown") : supportInfo.os],
-    [t("about.architecture"), supportInfo.architecture === "unknown" ? t("about.unknown") : supportInfo.architecture],
-    [t("about.runtime"), supportInfo.runtime === "portable" ? t("about.portable") : t("about.installed")],
+    [t("about.version"), versionDisplay],
+    [t("about.operatingSystem"), osDisplay],
+    [t("about.architecture"), architectureDisplay],
+    [t("about.runtime"), runtimeDisplay],
   ];
 
   return (
@@ -76,16 +121,21 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
         <DialogHeader className="items-center">
           <NyaTermLogo className="w-24 h-24 object-contain" />
           <DialogTitle className="text-lg">{appName}</DialogTitle>
-          <DialogDescription className="text-xs">v{appVersion}</DialogDescription>
+          <DialogDescription className="text-xs">v{versionDisplay}</DialogDescription>
         </DialogHeader>
 
         <p className="text-xs text-center px-4 leading-relaxed text-muted-foreground">
           {t("about.description")}
         </p>
 
-        <section className="w-full rounded-md border bg-muted/20 p-3" aria-labelledby="support-info-title">
+        <section
+          className="w-full rounded-md border bg-muted/20 p-3"
+          aria-labelledby="support-info-title"
+        >
           <div className="flex items-center justify-between gap-3 mb-2">
-            <h3 id="support-info-title" className="text-sm font-medium">{t("about.supportInfo")}</h3>
+            <h3 id="support-info-title" className="text-sm font-medium">
+              {t("about.supportInfo")}
+            </h3>
             <Button
               variant="ghost"
               size="sm"
@@ -93,6 +143,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
               onClick={() => void copySupportInfo()}
               title={t("about.copySupportInfo")}
               aria-label={t("about.copySupportInfo")}
+              disabled={!supportInfoReady}
             >
               {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
               {copied ? t("about.supportInfoCopiedShort") : t("about.copySupportInfo")}
