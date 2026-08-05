@@ -15,6 +15,8 @@ import {
   MdEdit,
   MdFormatListBulleted,
   MdGridView,
+  MdKeyboardArrowDown,
+  MdKeyboardArrowUp,
   MdKeyboardReturn,
   MdPushPin,
   MdSearch,
@@ -37,6 +39,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -72,7 +75,9 @@ import {
   collectQuickCommandCategoryDescendantIds,
   deleteQuickCommandCategoryTree,
   flattenVisibleQuickCommandCategoryTree,
+  getQuickCommandCategoryMoveState,
   getQuickCommandUncategorizedCount,
+  moveQuickCommandCategory,
 } from "@/lib/quickCommandCategories";
 import { cn } from "@/lib/utils";
 import type {
@@ -258,6 +263,15 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
       setCategoryToRename(null);
     },
     [categoryToRename],
+  );
+
+  const handleMoveCategory = useCallback(
+    (categoryId: string, direction: "up" | "down") => {
+      setSavedCategories((prev) =>
+        moveQuickCommandCategory(prev, categoryId, direction),
+      );
+    },
+    [],
   );
 
   const incrementUseCount = useCallback((id: string) => {
@@ -1267,6 +1281,12 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
                 const savedCategory = savedCategories.find(
                   (item) => item.id === category.id,
                 );
+                const moveState = savedCategory
+                  ? getQuickCommandCategoryMoveState(
+                      savedCategories,
+                      savedCategory.id,
+                    )
+                  : { canMoveUp: false, canMoveDown: false };
 
                 return (
                   <ContextMenu key={category.id}>
@@ -1344,6 +1364,25 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
                     </ContextMenuTrigger>
                     {savedCategory && (
                       <ContextMenuContent className="min-w-[120px]">
+                        <ContextMenuItem
+                          className="text-xs gap-2"
+                          disabled={!moveState.canMoveUp}
+                          onClick={() => handleMoveCategory(savedCategory.id, "up")}
+                        >
+                          <MdKeyboardArrowUp className="text-[0.875rem]" />
+                          {t("dialog.moveUp")}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          className="text-xs gap-2"
+                          disabled={!moveState.canMoveDown}
+                          onClick={() =>
+                            handleMoveCategory(savedCategory.id, "down")
+                          }
+                        >
+                          <MdKeyboardArrowDown className="text-[0.875rem]" />
+                          {t("dialog.moveDown")}
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
                         <ContextMenuItem
                           className="text-xs gap-2"
                           onClick={() => setCategoryToRename(savedCategory)}

@@ -87,6 +87,69 @@ mod tests {
         .unwrap();
 
         assert_eq!(cfg.categories[0].parent_id, None);
+        assert_eq!(cfg.categories[0].sort_order, 0);
+    }
+
+    #[test]
+    fn imports_nyaterm_config_json_with_category_sort_order() {
+        let raw = r#"{
+            "categories": [
+                {"id": "dev", "name": "Dev", "sort_order": 2},
+                {"id": "ops", "name": "Ops", "sort_order": 1},
+                {"id": "k8s", "name": "K8s", "parent_id": "dev", "sort_order": 4}
+            ],
+            "commands": []
+        }"#;
+        let import_config = parse_nyaterm_import(raw).unwrap();
+        let mut config = empty_config();
+
+        let stats = merge_import(&mut config, import_config).unwrap();
+
+        assert_eq!(stats.added_categories, 3);
+        assert_eq!(
+            config
+                .categories
+                .iter()
+                .find(|category| category.id == "dev")
+                .unwrap()
+                .sort_order,
+            2
+        );
+        assert_eq!(
+            config
+                .categories
+                .iter()
+                .find(|category| category.id == "k8s")
+                .unwrap()
+                .sort_order,
+            4
+        );
+    }
+
+    #[test]
+    fn import_without_sort_order_preserves_existing_category_order() {
+        let mut config = QuickCommandsConfig {
+            commands: Vec::new(),
+            categories: vec![QuickCommandCategory {
+                id: "general".to_string(),
+                name: "General".to_string(),
+                parent_id: None,
+                sort_order: 7,
+            }],
+        };
+        let import_config = parse_nyaterm_import(
+            r#"{
+                "categories": [{"id": "general", "name": "General Updated"}],
+                "commands": []
+            }"#,
+        )
+        .unwrap();
+
+        let stats = merge_import(&mut config, import_config).unwrap();
+
+        assert_eq!(stats.added_categories, 0);
+        assert_eq!(config.categories[0].name, "General Updated");
+        assert_eq!(config.categories[0].sort_order, 7);
     }
 
     #[test]

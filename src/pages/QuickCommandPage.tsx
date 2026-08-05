@@ -36,6 +36,7 @@ import {
   buildQuickCommandCategoryPath,
   buildQuickCommandCategoryTree,
   flattenVisibleQuickCommandCategoryTree,
+  getNextQuickCommandCategorySortOrder,
   hasQuickCommandCategorySiblingName,
 } from "@/lib/quickCommandCategories";
 import { cn, parseJsonSearchParam } from "@/lib/utils";
@@ -338,6 +339,10 @@ export default function QuickCommandPage() {
         id: newId,
         name: newCategoryName.trim(),
         parent_id: newCategoryParentId || undefined,
+        sort_order: getNextQuickCommandCategorySortOrder(
+          savedCategories,
+          newCategoryParentId,
+        ),
       };
       finalCategoryId = newId;
     }

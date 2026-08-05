@@ -788,6 +788,7 @@ export interface QuickCommandCategory {
   id: string;
   name: string;
   parent_id?: string;
+  sort_order?: number;
 }
 
 export interface QuickCommand {

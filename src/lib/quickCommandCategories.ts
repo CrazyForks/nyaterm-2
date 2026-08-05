@@ -12,6 +12,13 @@ export interface QuickCommandCategoryTreeRow {
   depth: number;
 }
 
+export type QuickCommandCategoryMoveDirection = "up" | "down";
+
+export interface QuickCommandCategoryMoveState {
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+}
+
 export function buildQuickCommandCategoryList(
   categories: QuickCommandCategory[],
   commands: QuickCommand[],
@@ -206,6 +213,79 @@ export function deleteQuickCommandCategoryTree(
   };
 }
 
+export function getNextQuickCommandCategorySortOrder(
+  categories: QuickCommandCategory[],
+  parentId: string | null | undefined,
+) {
+  const normalizedCategories = buildQuickCommandCategoryList(categories, []);
+  const categoryById = new Map(
+    normalizedCategories.map((category) => [category.id, category]),
+  );
+  const normalizedParentId = normalizeParentId(parentId);
+  const usableParentId =
+    normalizedParentId && categoryById.has(normalizedParentId)
+      ? normalizedParentId
+      : undefined;
+
+  return (
+    normalizedCategories
+      .filter(
+        (category) =>
+          getUsableParentId(category, categoryById) === usableParentId,
+      )
+      .reduce(
+        (max, category) => Math.max(max, category.sort_order ?? 0),
+        -1,
+      ) + 1
+  );
+}
+
+export function getQuickCommandCategoryMoveState(
+  categories: QuickCommandCategory[],
+  categoryId: string,
+): QuickCommandCategoryMoveState {
+  const { siblings, index } = getQuickCommandCategorySiblingOrder(
+    categories,
+    categoryId,
+  );
+
+  return {
+    canMoveUp: index > 0,
+    canMoveDown: index >= 0 && index < siblings.length - 1,
+  };
+}
+
+export function moveQuickCommandCategory(
+  categories: QuickCommandCategory[],
+  categoryId: string,
+  direction: QuickCommandCategoryMoveDirection,
+) {
+  const { siblings, index } = getQuickCommandCategorySiblingOrder(
+    categories,
+    categoryId,
+  );
+  if (index < 0) return categories;
+
+  const swapIndex = direction === "up" ? index - 1 : index + 1;
+  if (swapIndex < 0 || swapIndex >= siblings.length) return categories;
+
+  const reorderedSiblings = [...siblings];
+  [reorderedSiblings[index], reorderedSiblings[swapIndex]] = [
+    reorderedSiblings[swapIndex],
+    reorderedSiblings[index],
+  ];
+
+  const sortOrderById = new Map(
+    reorderedSiblings.map((category, sortOrder) => [category.id, sortOrder]),
+  );
+
+  return categories.map((category) =>
+    sortOrderById.has(category.id)
+      ? { ...category, sort_order: sortOrderById.get(category.id) }
+      : category,
+  );
+}
+
 export function getQuickCommandCategoryDirectCounts(commands: QuickCommand[]) {
   const counts = new Map<string, number>();
   for (const command of commands) {
@@ -244,11 +324,34 @@ function getUsableParentId(
   return parentId;
 }
 
+function getQuickCommandCategorySiblingOrder(
+  categories: QuickCommandCategory[],
+  categoryId: string,
+) {
+  const normalizedCategories = buildQuickCommandCategoryList(categories, []);
+  const categoryById = new Map(
+    normalizedCategories.map((category) => [category.id, category]),
+  );
+  const target = categoryById.get(categoryId);
+  if (!target) return { siblings: [], index: -1 };
+
+  const parentId = getUsableParentId(target, categoryById);
+  const siblings = normalizedCategories.filter(
+    (category) => getUsableParentId(category, categoryById) === parentId,
+  );
+
+  return {
+    siblings,
+    index: siblings.findIndex((category) => category.id === categoryId),
+  };
+}
+
 function compareQuickCommandCategories(
   left: QuickCommandCategory,
   right: QuickCommandCategory,
 ) {
   return (
+    (left.sort_order ?? 0) - (right.sort_order ?? 0) ||
     left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
     left.id.localeCompare(right.id)
   );

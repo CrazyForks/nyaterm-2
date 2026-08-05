@@ -23,12 +23,22 @@ fn merge_import(
                 .cloned()
                 .unwrap_or_else(|| unique_category_id(config, &slugify(&name))),
         };
+        let existing_sort_order = config
+            .categories
+            .iter()
+            .find(|item| item.id == id)
+            .map(|item| item.sort_order);
+        let sort_order = category
+            .sort_order
+            .or(existing_sort_order)
+            .unwrap_or_else(|| next_import_category_sort_order(config, parent_id.as_deref()));
         if upsert_category(
             config,
             QuickCommandCategory {
                 id: id.clone(),
                 name: name.clone(),
                 parent_id: parent_id.clone(),
+                sort_order,
             },
         ) {
             stats.added_categories += 1;
@@ -149,10 +159,12 @@ fn ensure_category(
         return;
     }
 
+    let sort_order = next_import_category_sort_order(config, parent_id.as_deref());
     config.categories.push(QuickCommandCategory {
         id: id.to_string(),
         name: name.to_string(),
         parent_id: parent_id.clone(),
+        sort_order,
     });
     category_names.insert((parent_id, name.to_string()), id.to_string());
     stats.added_categories += 1;
@@ -211,6 +223,17 @@ fn unique_category_id(config: &QuickCommandsConfig, preferred_id: &str) -> Strin
     }
 
     unreachable!("unbounded category id suffix search should always return")
+}
+
+fn next_import_category_sort_order(config: &QuickCommandsConfig, parent_id: Option<&str>) -> i32 {
+    config
+        .categories
+        .iter()
+        .filter(|category| category.parent_id.as_deref() == parent_id)
+        .map(|category| category.sort_order)
+        .max()
+        .unwrap_or(-1)
+        + 1
 }
 
 fn require_text(value: &str, field: &str) -> AppResult<String> {
