@@ -283,6 +283,7 @@ export type SftpCwdFollowMode = "off" | "shell_integration" | "rc_file";
 export interface SftpSettings {
   enabled: boolean;
   cwd_follow_mode: SftpCwdFollowMode;
+  shell_detection_timeout_ms: number;
   filename_encoding?: string;
 }
 
