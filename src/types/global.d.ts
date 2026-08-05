@@ -13,7 +13,13 @@ export interface AppRuntimeInfo {
 }
 
 /** AI Agent command execution wrapper profile. */
-export type AIExecutionProfile = "auto" | "posix" | "powershell" | "cmd" | "send_only" | "disabled";
+export type AIExecutionProfile =
+  | "auto"
+  | "posix"
+  | "powershell"
+  | "cmd"
+  | "send_only"
+  | "disabled";
 
 /** A group of sessions whose terminal input is broadcast to all members. */
 export interface SyncGroup {
@@ -115,7 +121,12 @@ export interface SshConfig {
 export type SshAuth =
   | { type: "none" }
   | { type: "password"; password?: string | null }
-  | { type: "key"; key_data: string; cert_data?: string | null; passphrase?: string };
+  | {
+      type: "key";
+      key_data: string;
+      cert_data?: string | null;
+      passphrase?: string;
+    };
 
 /** Group for organizing saved connections. Groups form a tree via parent_id. */
 export interface Group {
@@ -436,7 +447,11 @@ export type RightPanelId =
   | "recording"
   | "syncBackupHistory";
 
-export type ActivityBarZone = "left_top" | "left_bottom" | "right_top" | "right_bottom";
+export type ActivityBarZone =
+  | "left_top"
+  | "left_bottom"
+  | "right_top"
+  | "right_bottom";
 
 export interface ActivityBarLayout {
   left_top: string[];
@@ -450,7 +465,13 @@ export interface ActivityBarLayout {
 /** Layout preferences: panel widths, active panels, theme. */
 export type QuickCommandViewMode = "list" | "compact" | "tile";
 export type QuickCommandSortMode = "created" | "name" | "useCount";
-export type HeaderStatusMode = "session" | "resources" | "host" | "datetime" | "gpu" | "npu";
+export type HeaderStatusMode =
+  | "session"
+  | "resources"
+  | "host"
+  | "datetime"
+  | "gpu"
+  | "npu";
 
 export type RestorableTerminalWindowNode =
   | {
@@ -473,6 +494,7 @@ export interface UiConfig {
   left_width: number;
   right_width: number;
   quick_cmd_height: number;
+  quick_cmd_category_width?: number;
   quick_cmd_view_mode: QuickCommandViewMode;
   quick_cmd_sort_mode?: QuickCommandSortMode;
   quick_cmd_selected_category?: string;
@@ -765,6 +787,7 @@ export interface RemoteNpuOverview {
 export interface QuickCommandCategory {
   id: string;
   name: string;
+  parent_id?: string;
 }
 
 export interface QuickCommand {
@@ -789,7 +812,10 @@ export interface QuickCommandsConfig {
   categories: QuickCommandCategory[];
 }
 
-export type QuickCommandImportSource = "windterm_quickbar" | "xshell_xts" | "nyaterm_json";
+export type QuickCommandImportSource =
+  | "windterm_quickbar"
+  | "xshell_xts"
+  | "nyaterm_json";
 
 export interface QuickCommandImportResult {
   imported_commands: number;
@@ -1054,7 +1080,13 @@ export type AIMode = "ask" | "agent";
 export type AIAgentCommandExecutionMode = "confirm_each" | "smart" | "auto";
 export type AIAgentKind = "nyaterm" | "codex" | "claude_code";
 export type AIPermissionMode = "observer" | "confirm" | "auto";
-export type AIReasoningEffort = "auto" | "none" | "low" | "medium" | "high" | "xhigh";
+export type AIReasoningEffort =
+  | "auto"
+  | "none"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 export type AIModelSource = "rust-genai" | "manual";
 export type AIBackendKind = "genai" | "codex";
 export type CodexThreadMode = "persistent" | "ephemeral";
@@ -1274,7 +1306,12 @@ export interface AIStreamEventPayload {
 }
 
 export type AgentActionKind = "execute_command" | "final_answer";
-export type AgentStepStatus = "running" | "completed" | "needs_approval" | "rejected" | "failed";
+export type AgentStepStatus =
+  | "running"
+  | "completed"
+  | "needs_approval"
+  | "rejected"
+  | "failed";
 
 export interface AgentStepAction {
   kind: AgentActionKind;

@@ -41,6 +41,8 @@ pub struct QuickCommand {
 pub struct QuickCommandCategory {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 /// List of quick commands persisted in local app storage.

@@ -47,6 +47,8 @@ struct ImportCategory {
     #[serde(default)]
     id: Option<String>,
     name: String,
+    #[serde(default)]
+    parent_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
