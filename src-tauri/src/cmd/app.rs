@@ -103,6 +103,130 @@ pub fn get_app_runtime_info(
     state.info()
 }
 
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSupportInfo {
+    os: String,
+    architecture: String,
+    runtime: String,
+}
+
+#[tauri::command]
+pub fn get_support_info(state: tauri::State<'_, crate::runtime::AppRuntime>) -> AppSupportInfo {
+    AppSupportInfo {
+        os: operating_system_label(),
+        architecture: std::env::consts::ARCH.to_string(),
+        runtime: support_runtime_label(state.portable()).to_string(),
+    }
+}
+
+fn support_runtime_label(portable: bool) -> &'static str {
+    if portable { "portable" } else { "installed" }
+}
+
+fn operating_system_label() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_version_label();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return command_output("sw_vers", &["-productName", "-productVersion"])
+            .unwrap_or_else(|| "macOS".to_string());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(contents) = std::fs::read_to_string("/etc/os-release") {
+            let name = contents
+                .lines()
+                .find_map(|line| line.strip_prefix("PRETTY_NAME="))
+                .map(|value| value.trim_matches('"').to_string());
+            if let Some(name) = name {
+                return name;
+            }
+        }
+        return "Linux".to_string();
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        std::env::consts::OS.to_string()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_version_label() -> String {
+    use windows::Wdk::System::SystemServices::RtlGetVersion;
+    use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+
+    let mut version = OSVERSIONINFOW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+
+    // RtlGetVersion queries the current Windows version in-process, avoiding a console process.
+    if unsafe { RtlGetVersion(&mut version) }.is_ok() {
+        windows_version_label_from_parts(
+            version.dwMajorVersion,
+            version.dwMinorVersion,
+            version.dwBuildNumber,
+        )
+    } else {
+        "Windows".to_string()
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_version_label_from_parts(major: u32, minor: u32, build: u32) -> String {
+    let name = match (major, minor, build) {
+        (10, 0, 22_000..) => "Windows 11",
+        (10, 0, _) => "Windows 10",
+        (6, 3, _) => "Windows 8.1",
+        (6, 2, _) => "Windows 8",
+        (6, 1, _) => "Windows 7",
+        _ => "Windows",
+    };
+    format!("{name} ({major}.{minor}.{build})")
+}
+
+#[cfg(target_os = "macos")]
+fn command_output(program: &str, args: &[&str]) -> Option<String> {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    (!value.is_empty()).then_some(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{support_runtime_label, windows_version_label_from_parts};
+
+    #[test]
+    fn support_runtime_label_matches_installation_mode() {
+        assert_eq!(support_runtime_label(true), "portable");
+        assert_eq!(support_runtime_label(false), "installed");
+    }
+
+    #[test]
+    fn windows_version_label_uses_native_version_parts() {
+        assert_eq!(
+            windows_version_label_from_parts(10, 0, 22_631),
+            "Windows 11 (10.0.22631)"
+        );
+        assert_eq!(
+            windows_version_label_from_parts(10, 0, 19_045),
+            "Windows 10 (10.0.19045)"
+        );
+    }
+}
+
 #[tauri::command]
 pub fn get_app_lock_state(state: tauri::State<'_, AppLockState>) -> bool {
     state.is_locked()
