@@ -1378,6 +1378,7 @@ export function SshForm({
       </Collapsible>
 
       <Dialog
+        disablePointerDismissal
         open={showKeyManagement}
         onOpenChange={(open) => {
           setShowKeyManagement(open);
@@ -1400,6 +1401,7 @@ export function SshForm({
         </DialogContent>
       </Dialog>
       <Dialog
+        disablePointerDismissal
         open={showPasswordManagement}
         onOpenChange={(open) => {
           setShowPasswordManagement(open);

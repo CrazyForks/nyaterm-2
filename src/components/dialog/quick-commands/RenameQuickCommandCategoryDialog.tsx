@@ -63,6 +63,7 @@ export default function RenameQuickCommandCategoryDialog({
 
   return (
     <Dialog
+      disablePointerDismissal
       open={!!category}
       onOpenChange={(open) => {
         if (!open) onCancel();
