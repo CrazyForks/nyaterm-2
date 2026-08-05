@@ -1,6 +1,6 @@
 {
   "about": {
-    "architecture": "시스템 아키텍처",
+    "architecture": "애플리케이션 아키텍처",
     "close": "닫기",
     "copySupportInfo": "전체 복사",
     "description": "SSH 중심 작업과 다양한 터미널 워크플로를 위한 데스크톱 클라이언트입니다.",

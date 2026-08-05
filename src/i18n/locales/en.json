@@ -1,6 +1,6 @@
 {
   "about": {
-    "architecture": "Architecture",
+    "architecture": "Application architecture",
     "close": "Close",
     "copySupportInfo": "Copy all",
     "description": "A desktop client for SSH-centric operations and mixed terminal workflows.",
