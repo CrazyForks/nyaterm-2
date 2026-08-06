@@ -1472,6 +1472,7 @@
     "connectionFailed": "連線失敗：{{error}}",
     "connectionName": "連線名稱",
     "copy": "複製",
+    "copyFailed": "複製失敗，請重試",
     "dataBits": "資料位",
     "delete": "刪除",
     "deleteConfirm": "確定要刪除「{{name}}」嗎？此操作不可撤銷。",

@@ -1469,6 +1469,7 @@
     "connectionFailed": "연결 실패: {{error}}",
     "connectionName": "이름",
     "copy": "복사",
+    "copyFailed": "복사에 실패했습니다. 다시 시도하세요",
     "dataBits": "데이터 비트",
     "delete": "삭제",
     "deleteConfirm": "'{{name}}'을(를) 삭제할까요? 되돌릴 수 없습니다.",
