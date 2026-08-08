@@ -1654,6 +1654,8 @@
     "authentication": "Authentication",
     "autoCheckOnStartup": "Check Cloud on Startup",
     "autoCheckOnStartupDesc": "Compare local and latest cloud snapshots on startup.",
+    "autoPullRemoteChanges": "Auto Pull Remote Changes",
+    "autoPullRemoteChangesDesc": "Automatically pull remote changes when there are no unsynchronized local changes.",
     "autoPushOnChange": "Auto Push After Changes",
     "autoPushOnChangeDesc": "Upload a new encrypted sync snapshot after local configuration changes settle.",
     "autoSyncStrategy": "Auto Sync",

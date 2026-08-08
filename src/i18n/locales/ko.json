@@ -1650,6 +1650,8 @@
     "authentication": "인증",
     "autoCheckOnStartup": "시작 시 클라우드 확인",
     "autoCheckOnStartupDesc": "시작 시 로컬 스냅샷과 최신 클라우드 스냅샷을 비교합니다.",
+    "autoPullRemoteChanges": "원격 변경 자동 가져오기",
+    "autoPullRemoteChangesDesc": "동기화되지 않은 로컬 변경이 없을 때 원격 변경을 자동으로 가져옵니다.",
     "autoPushOnChange": "변경 후 자동 업로드",
     "autoPushOnChangeDesc": "로컬 설정 변경이 안정된 후 새 암호화 동기화 스냅샷을 업로드합니다.",
     "autoSyncStrategy": "자동 동기화",

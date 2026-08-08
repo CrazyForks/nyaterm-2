@@ -1648,6 +1648,8 @@
     "authentication": "身分驗證與加密",
     "autoCheckOnStartup": "啟動時檢查雲端同步",
     "autoCheckOnStartupDesc": "應用程式啟動時比較本機快照與雲端同步的最新快照。",
+    "autoPullRemoteChanges": "自動拉取遠端變更",
+    "autoPullRemoteChangesDesc": "當偵測到遠端設定已更新且本機沒有未同步修改時，自動拉取最新設定。",
     "autoPushOnChange": "設定變更後自動推送",
     "autoPushOnChangeDesc": "本機設定變更儲存完成並穩定後，自動上傳新的加密雲端同步快照。",
     "autoSyncStrategy": "自動同步策略",
