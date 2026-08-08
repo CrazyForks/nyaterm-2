@@ -566,7 +566,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLoggerLevel(cfg.diagnostics.level);
         appSettingsLoaded.current = true;
         setSettingsLoaded(true);
-        if (cfg.security?.enable_screen_lock) {
+        if (isPrimaryMainWindow() && cfg.security?.enable_screen_lock) {
           setIsLocked(true);
         }
       })
