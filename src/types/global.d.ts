@@ -1510,6 +1510,7 @@ export interface CloudSyncSettings {
   device_name: string;
   auto_check_on_startup: boolean;
   auto_push_on_change: boolean;
+  auto_pull_remote_changes: boolean;
   sync_debounce_seconds: number;
   webdav: WebdavSyncSettings;
   s3: S3SyncSettings;

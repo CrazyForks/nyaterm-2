@@ -424,6 +424,14 @@ pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
                     window.label(),
                 );
             }
+            tauri::WindowEvent::Focused(true) => {
+                if let Some(manager) = window.app_handle().try_state::<Arc<CloudSyncManager>>() {
+                    let manager = manager.inner().clone();
+                    tauri::async_runtime::spawn(async move {
+                        manager.request_focus_remote_check().await;
+                    });
+                }
+            }
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 if let Err(error) = crate::window_state::save_main_window_state(window) {
                     tracing::warn!("Failed to save main window state on close: {}", error);
