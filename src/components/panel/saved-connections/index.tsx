@@ -12,6 +12,8 @@ import {
   MdSearch,
   MdSort,
   MdSortByAlpha,
+  MdUnfoldLess,
+  MdUnfoldMore,
 } from "react-icons/md";
 import { TiFlashOutline } from "react-icons/ti";
 import { toast } from "sonner";
@@ -120,7 +122,9 @@ export default function SavedConnections({
   // ── UI state ──────────────────────────────────────────────────────────────
   // Tracks in-flight connections to prevent duplicate invocations (not shown in UI)
   const connectingIdsRef = useRef<Set<string>>(new Set());
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(appSettings.ui.saved_connections_expanded_group_ids ?? []),
+  );
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
   const [keyboardActiveConnectionId, setKeyboardActiveConnectionId] = useState<string | null>(null);
@@ -503,13 +507,34 @@ export default function SavedConnections({
   }, [savedConnections]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
+  const persistExpandedGroups = useCallback(
+    (next: Set<string>) => {
+      setExpandedGroups(next);
+      updateUi({ saved_connections_expanded_group_ids: Array.from(next) });
+    },
+    [updateUi],
+  );
+
   const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
+    const next = new Set(expandedGroups);
+    if (next.has(groupId)) next.delete(groupId);
+    else next.add(groupId);
+    persistExpandedGroups(next);
+  };
+
+  const allGroupIds = useMemo(() => new Set(savedGroups.map((group) => group.id)), [savedGroups]);
+
+  const allGroupsExpanded = useMemo(() => {
+    if (savedGroups.length === 0) return false;
+    return savedGroups.every((group) => expandedGroups.has(group.id));
+  }, [expandedGroups, savedGroups]);
+
+  const expandAllGroups = () => {
+    persistExpandedGroups(allGroupIds);
+  };
+
+  const collapseAllGroups = () => {
+    persistExpandedGroups(new Set());
   };
 
   const getConnectionRangeSelection = (
@@ -1442,6 +1467,27 @@ export default function SavedConnections({
                 style={{ transform: sortMode === "name-desc" ? "scaleY(-1)" : undefined }}
               />
             </HeaderActionButton>
+
+            {savedGroups.length > 0 && (
+              <HeaderActionButton
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 h-6 w-6 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
+                style={{ color: "var(--df-text-muted)" }}
+                tooltip={
+                  allGroupsExpanded
+                    ? t("savedConnections.collapseAllFolders")
+                    : t("savedConnections.expandAllFolders")
+                }
+                onClick={allGroupsExpanded ? collapseAllGroups : expandAllGroups}
+              >
+                {allGroupsExpanded ? (
+                  <MdUnfoldLess className="text-[1rem]" />
+                ) : (
+                  <MdUnfoldMore className="text-[1rem]" />
+                )}
+              </HeaderActionButton>
+            )}
 
             <HeaderActionButton
               variant="ghost"
