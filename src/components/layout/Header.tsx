@@ -586,20 +586,10 @@ interface MenuItem {
 }
 
 type MacosPredefinedRole =
-  | "undo"
-  | "redo"
-  | "cut"
-  | "copy"
-  | "paste"
-  | "selectAll"
   | "services"
   | "hide"
   | "hideOthers"
-  | "showAll"
-  | "minimize"
-  | "maximize"
-  | "fullscreen"
-  | "closeWindow";
+  | "showAll";
 
 type MacosMenuSpecItem =
   | {
@@ -640,7 +630,7 @@ interface MacosMenuActionPayload {
   targetWindowLabel?: string | null;
 }
 
-const MACOS_ALLOWED_LOCKED_ACTIONS = new Set(["app.about", "app.quit", "window.bringAllToFront"]);
+const MACOS_ALLOWED_LOCKED_ACTIONS = new Set(["app.about", "app.quit"]);
 
 function getMacosAccelerator(shortcutId: string, keybindings: Record<string, string>) {
   const keys = resolveShortcutKeys(shortcutId, keybindings);
@@ -1301,19 +1291,6 @@ export default function Header({
         items: convertMenuItemsForMacos(menus.file),
       },
       {
-        id: "edit",
-        label: t("menu.edit"),
-        items: [
-          { kind: "predefined", role: "undo", label: t("menu.undo") },
-          { kind: "predefined", role: "redo", label: t("menu.redo") },
-          { kind: "separator" },
-          { kind: "predefined", role: "cut", label: t("menu.cut") },
-          { kind: "predefined", role: "copy", label: t("menu.copy") },
-          { kind: "predefined", role: "paste", label: t("menu.paste") },
-          { kind: "predefined", role: "selectAll", label: t("menu.selectAll") },
-        ],
-      },
-      {
         id: "view",
         label: t("menu.view"),
         items: convertMenuItemsForMacos(menus.view),
@@ -1322,25 +1299,6 @@ export default function Header({
         id: "terminal",
         label: t("menu.terminal"),
         items: convertMenuItemsForMacos(menus.terminal),
-      },
-      {
-        id: "window",
-        label: t("menu.window"),
-        items: [
-          { kind: "predefined", role: "minimize", label: t("menu.minimize") },
-          { kind: "predefined", role: "maximize", label: t("menu.maximize") },
-          { kind: "predefined", role: "fullscreen", label: t("menu.toggleFullScreen") },
-          { kind: "separator" },
-          { kind: "predefined", role: "closeWindow", label: t("menu.closeWindow") },
-          { kind: "separator" },
-          {
-            kind: "item",
-            id: "window.bringAllToFront",
-            label: t("menu.bringAllToFront"),
-            enabled: true,
-            accelerator: null,
-          },
-        ],
       },
       {
         id: "help",
@@ -1354,10 +1312,6 @@ export default function Header({
     if (locked && !MACOS_ALLOWED_LOCKED_ACTIONS.has(actionId)) return;
     if (actionId === "app.quit") {
       onRequestQuit?.();
-      return;
-    }
-    if (actionId === "window.bringAllToFront") {
-      appWindow.setFocus().catch(() => {});
       return;
     }
 
