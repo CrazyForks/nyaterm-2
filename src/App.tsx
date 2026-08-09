@@ -3273,6 +3273,8 @@ function App() {
           onClearTerminal: () => window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
           onRefitTerminals: () =>
             window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals")),
+          locked: isLocked,
+          onRequestQuit: handleRequestQuit,
         }}
         mobile={{
           leftOpen: mobileLeftOpen,

@@ -99,6 +99,7 @@ pub fn run() {
         .manage(app_lock_state)
         .manage(external_open_state)
         .manage(portable_update_state)
+        .on_menu_event(cmd::macos_menu::handle_menu_event)
         .setup(move |a| {
             app::setup(
                 a,
@@ -123,6 +124,7 @@ pub fn run() {
             cmd::app::open_transfer_target_directory,
             cmd::app::resolve_local_drop_paths,
             cmd::app::read_background_image_data_url,
+            cmd::macos_menu::set_macos_app_menu,
             cmd::external_open::claim_external_open_requests,
             cmd::updater::check_portable_update,
             cmd::updater::download_portable_update,

@@ -12,6 +12,7 @@ pub mod gpu;
 pub mod importer;
 pub mod local_fs;
 pub mod log;
+pub mod macos_menu;
 pub mod note;
 pub mod otp;
 pub mod process;
