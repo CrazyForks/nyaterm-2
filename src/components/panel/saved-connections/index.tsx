@@ -94,6 +94,14 @@ function shouldUsePointerSavedConnectionsDrag() {
   return /Mac/.test(navigator.platform) && /AppleWebKit/.test(navigator.userAgent);
 }
 
+function areStringSetsEqual(left: Set<string>, right: Set<string>) {
+  if (left.size !== right.size) return false;
+  for (const value of left) {
+    if (!right.has(value)) return false;
+  }
+  return true;
+}
+
 function HeaderActionButton({ tooltip, children, ...props }: HeaderActionButtonProps) {
   return (
     <Tooltip>
@@ -122,16 +130,13 @@ export default function SavedConnections({
   // ── UI state ──────────────────────────────────────────────────────────────
   // Tracks in-flight connections to prevent duplicate invocations (not shown in UI)
   const connectingIdsRef = useRef<Set<string>>(new Set());
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(appSettings.ui.saved_connections_expanded_group_ids ?? []),
-  );
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
   const [keyboardActiveConnectionId, setKeyboardActiveConnectionId] = useState<string | null>(null);
   const searchExpandedBaseRef = useRef<Set<string> | null>(null);
   const searchAutoExpandedGroupIdsRef = useRef<Set<string>>(new Set());
   const previousKeywordRef = useRef("");
-  const restoredLastOpenedConnectionIdRef = useRef<string | null>(null);
   const lastSelectedConnectionIdRef = useRef<string | null>(null);
   const connectionElementRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const sortMode = (appSettings.ui.saved_connections_sort_mode || "default") as SortMode;
@@ -235,53 +240,13 @@ export default function SavedConnections({
   }, [savedConnections, savedGroups, keyword, sortMode]);
 
   useEffect(() => {
-    const connectionId = appSettings.ui.saved_connections_last_opened_connection_id;
-    if (!connectionId || restoredLastOpenedConnectionIdRef.current === connectionId) return;
-
-    const connection = savedConnections.find((item) => item.id === connectionId);
-    if (!connection) {
-      if (savedConnections.length > 0) {
-        restoredLastOpenedConnectionIdRef.current = connectionId;
-      }
-      return;
-    }
-
-    const initialGroupId = connection.group_id;
-    if (!initialGroupId) {
-      restoredLastOpenedConnectionIdRef.current = connectionId;
-      return;
-    }
-
-    if (savedGroups.length === 0) return;
-
-    const groupsById = new Map(savedGroups.map((group) => [group.id, group]));
-    const groupIdsToOpen: string[] = [];
-    const visitedGroupIds = new Set<string>();
-    let currentGroupId: string | undefined = initialGroupId;
-
-    while (currentGroupId && !visitedGroupIds.has(currentGroupId)) {
-      visitedGroupIds.add(currentGroupId);
-      const group = groupsById.get(currentGroupId);
-      if (!group) break;
-      groupIdsToOpen.push(group.id);
-      currentGroupId = group.parent_id;
-    }
-
-    restoredLastOpenedConnectionIdRef.current = connectionId;
-    if (groupIdsToOpen.length === 0) return;
-
+    const persistedExpandedGroups = new Set(
+      appSettings.ui.saved_connections_expanded_group_ids ?? [],
+    );
     setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      groupIdsToOpen.forEach((groupId) => {
-        if (!next.has(groupId)) {
-          next.add(groupId);
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
+      return areStringSetsEqual(prev, persistedExpandedGroups) ? prev : persistedExpandedGroups;
     });
-  }, [appSettings.ui.saved_connections_last_opened_connection_id, savedConnections, savedGroups]);
+  }, [appSettings.ui.saved_connections_expanded_group_ids]);
 
   useEffect(() => {
     const previousKeyword = previousKeywordRef.current;
