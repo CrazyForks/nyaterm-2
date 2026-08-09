@@ -2788,7 +2788,12 @@ export default function XTerminal({
         }
       }
 
-      const command = data === "\r" ? getTrackedSubmissionCommand(inputStateRef.current) : "";
+      let command = "";
+      if (data === "\r") {
+        const currentInputState = inputStateRef.current;
+        const recovered = resyncFromTerminalLine(currentInputState, readCurrentInputLine(terminal));
+        command = getTrackedSubmissionCommand(recovered ?? currentInputState);
+      }
       if (data === "\r") {
         refreshCommandLineTimestamp();
       }

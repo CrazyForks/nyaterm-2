@@ -129,6 +129,8 @@ import type {
   AssetMetadata,
   CloudConflictPreview,
   PaneSplitDirection,
+  RecordingMode,
+  RecordingStatus,
   SavedConnection,
   SessionInfo,
   SessionPane,
@@ -293,6 +295,7 @@ async function sendStartupCommandToSession(
   await sendSessionInput(sessionId, buildTerminalCommandInput(startupCommand.command), {
     preview: { kind: "reset" },
     registerSubmission: startupCommand.command,
+    origin: "startup_command",
   });
 }
 
@@ -419,16 +422,20 @@ function App() {
     });
   }, [updateUi]);
 
-  // Recording state: tracks which sessions are currently being recorded
-  const [recordingSessions, setRecordingSessions] = useState<Set<string>>(new Set());
+  // Recording state: active file recording statuses reported by the backend.
+  const [recordingStatuses, setRecordingStatuses] = useState<RecordingStatus[]>([]);
+  const recordingSessions = useMemo(
+    () => new Set(recordingStatuses.map((status) => status.sessionId)),
+    [recordingStatuses],
+  );
   const [liveSessionIds, setLiveSessionIds] = useState<Set<string> | null>(null);
   const assetMonitoringCacheRef = useRef<Map<string, AssetMonitoringCacheEntry>>(new Map());
   const assetMonitoringFlushesRef = useRef<Set<string>>(new Set());
 
-  const refreshRecordingSessions = useCallback(async () => {
+  const refreshRecordingStatuses = useCallback(async () => {
     try {
-      const sessionIds = await invoke<string[]>("list_recording_sessions");
-      setRecordingSessions(new Set(sessionIds));
+      const statuses = await invoke<RecordingStatus[]>("list_recording_statuses");
+      setRecordingStatuses(statuses);
     } catch (error) {
       logger.error({
         domain: "session.lifecycle",
@@ -440,14 +447,18 @@ function App() {
   }, []);
 
   useEffect(() => {
-    void refreshRecordingSessions();
-    const unlisten = listen("sessions-changed", () => {
-      void refreshRecordingSessions();
+    void refreshRecordingStatuses();
+    const unlistenSessions = listen("sessions-changed", () => {
+      void refreshRecordingStatuses();
+    });
+    const unlistenRecording = listen<RecordingStatus>("recording-status-changed", () => {
+      void refreshRecordingStatuses();
     });
     return () => {
-      unlisten.then((dispose) => dispose());
+      unlistenSessions.then((dispose) => dispose());
+      unlistenRecording.then((dispose) => dispose());
     };
-  }, [refreshRecordingSessions]);
+  }, [refreshRecordingStatuses]);
 
   useEffect(() => {
     let disposed = false;
@@ -482,7 +493,7 @@ function App() {
   useEffect(() => {
     if (!settingsLoaded) return;
     void invoke("set_recording_memory_limit", {
-      maxBytes: Math.max(1, appSettings.transfer.recording_memory_limit_bytes || 5 * 1024 * 1024),
+      maxBytes: Math.max(1, appSettings.recording.memory_limit_bytes || 5 * 1024 * 1024),
     }).catch((error) => {
       logger.error({
         domain: "settings.persistence",
@@ -491,7 +502,7 @@ function App() {
         error,
       });
     });
-  }, [appSettings.transfer.recording_memory_limit_bytes, settingsLoaded]);
+  }, [appSettings.recording.memory_limit_bytes, settingsLoaded]);
 
   // OTP / 2FA dialog state
   const [otpRequest, setOtpRequest] = useState<OtpRequest | null>(null);
@@ -2734,26 +2745,22 @@ function App() {
 
   const buildRecordingFilePath = useCallback(
     async (prefix: "recording" | "session", sessionName: string) => {
-      const dir = appSettings.transfer.recording_path || (await downloadDir());
+      const dir = appSettings.recording.base_path || (await downloadDir());
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       return joinPath(dir, `${prefix}-${safeRecordingName(sessionName)}-${timestamp}.log`);
     },
-    [appSettings.transfer.recording_path],
+    [appSettings.recording.base_path],
   );
 
   const handleToggleSessionRecording = useCallback(
-    async (session: SessionInfo) => {
+    async (session: SessionInfo, mode: RecordingMode = "transcript") => {
       const sessionId = session.id;
       const isActive = recordingSessions.has(sessionId);
 
       if (isActive) {
         try {
           const savedPath = await invoke<string>("stop_recording", { sessionId });
-          setRecordingSessions((prev) => {
-            const next = new Set(prev);
-            next.delete(sessionId);
-            return next;
-          });
+          await refreshRecordingStatuses();
           toast.success(t("recording.saved", { path: savedPath }));
         } catch (error) {
           logger.error({
@@ -2769,18 +2776,14 @@ function App() {
       }
 
       try {
-        const filePath = await buildRecordingFilePath("recording", session.name);
-        await invoke("start_recording", {
-          sessionId,
-          filePath,
-          includeIoLabels: appSettings.transfer.recording_include_io_labels,
-          includeTimestamps: appSettings.transfer.recording_include_timestamps ?? true,
+        await invoke<string>("start_recording", {
+          request: {
+            sessionId,
+            mode,
+            explicitPath: null,
+          },
         });
-        setRecordingSessions((prev) => {
-          const next = new Set(prev);
-          next.add(sessionId);
-          return next;
-        });
+        await refreshRecordingStatuses();
         toast.success(t("recording.started"));
       } catch (error) {
         logger.error({
@@ -2794,9 +2797,7 @@ function App() {
       }
     },
     [
-      appSettings.transfer.recording_include_io_labels,
-      appSettings.transfer.recording_include_timestamps,
-      buildRecordingFilePath,
+      refreshRecordingStatuses,
       recordingSessions,
       t,
     ],
@@ -2809,8 +2810,8 @@ function App() {
         const savedPath = await invoke<string>("save_session_transcript", {
           sessionId: session.id,
           filePath,
-          includeIoLabels: appSettings.transfer.recording_include_io_labels,
-          includeTimestamps: appSettings.transfer.recording_include_timestamps ?? true,
+          includeIoLabels: appSettings.recording.include_io_labels,
+          includeTimestamps: appSettings.recording.include_timestamps ?? true,
         });
         toast.success(t("recording.transcriptSaved", { path: savedPath }));
       } catch (error) {
@@ -2825,8 +2826,8 @@ function App() {
       }
     },
     [
-      appSettings.transfer.recording_include_io_labels,
-      appSettings.transfer.recording_include_timestamps,
+      appSettings.recording.include_io_labels,
+      appSettings.recording.include_timestamps,
       buildRecordingFilePath,
       t,
     ],
@@ -3160,7 +3161,7 @@ function App() {
         gpuOverviewState={gpuOverviewState}
         npuMonitorEnabled={uiConfig.show_ascend_npu_monitor ?? false}
         npuOverviewState={npuOverviewState}
-        recordingSessions={recordingSessions}
+        recordingStatuses={recordingStatuses}
         aiIntent={aiIntent}
         transferHeight={uiConfig.transfer_height || 180}
         onTransferResize={handleTransferResize}
@@ -3199,7 +3200,7 @@ function App() {
       handleToggleSessionRecording,
       handleTransferResize,
       connectSavedConnection,
-      recordingSessions,
+    recordingStatuses,
       uiConfig.show_ascend_npu_monitor,
       uiConfig.show_gpu_monitor,
       uiConfig.transfer_height,

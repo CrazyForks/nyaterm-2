@@ -269,6 +269,7 @@ fn close_scoped_child_windows(app: &tauri::AppHandle, main_label: &str) {
 pub fn setup(
     app: &mut tauri::App,
     session_manager: Arc<SessionManager>,
+    recording_manager: Arc<crate::core::RecordingManager>,
     quick_commands_store: Arc<QuickCommandsStore>,
     cloud_sync_manager: Arc<CloudSyncManager>,
     runtime: AppRuntime,
@@ -300,6 +301,8 @@ pub fn setup(
     }
 
     session_manager.set_app_handle(app.handle().clone());
+    session_manager.set_recording_manager(recording_manager.clone());
+    recording_manager.set_app_handle(app.handle().clone());
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     install_external_open_handlers(app.handle(), &runtime);
 

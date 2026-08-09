@@ -57,6 +57,7 @@ fn sample_connection(id: &str, group_id: Option<&str>, sort_order: i32) -> Saved
         }),
         network: None,
         post_login: None,
+        recording: None,
         ssh_algorithms: None,
         sftp: SftpSettings::default(),
         asset: None,

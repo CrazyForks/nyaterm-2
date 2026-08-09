@@ -21,6 +21,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +40,7 @@ import type {
   Group,
   OtpEntry,
   ProxyConfig,
+  RecordingMode,
   SavedConnection,
   SftpSettings,
   SshAlgorithmPreferences,
@@ -179,6 +187,9 @@ export default function NewSessionPage() {
 
   // Per-connection encoding ("global" = follow global setting)
   const [encoding, setEncoding] = useState("global");
+  const [recordingUseGlobal, setRecordingUseGlobal] = useState(true);
+  const [recordingAutoStart, setRecordingAutoStart] = useState(false);
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>("transcript");
 
   useEffect(() => {
     invoke<Group[]>("get_groups")
@@ -218,6 +229,9 @@ export default function NewSessionPage() {
         };
         setCurrentTab(tabMap[found.type] || "ssh");
         setEncoding(found.encoding || "global");
+        setRecordingUseGlobal(!found.recording);
+        setRecordingAutoStart(found.recording?.auto_start ?? appSettings.recording.auto_start);
+        setRecordingMode(found.recording?.mode ?? appSettings.recording.default_mode);
 
         if (found.type === "ssh") {
           setHost(found.host || "");
@@ -267,7 +281,7 @@ export default function NewSessionPage() {
         }
       })
       .catch((e) => setError(getErrorMessage(e)));
-  }, [editId, t]);
+  }, [appSettings.recording.auto_start, appSettings.recording.default_mode, editId, t]);
 
   const loadSerialPorts = useCallback(async () => {
     setSerialPortsLoading(true);
@@ -339,10 +353,13 @@ export default function NewSessionPage() {
     setTelnetSendNaws(true);
     setTelnetSendSga(true);
     setEncoding("global");
+    setRecordingUseGlobal(true);
+    setRecordingAutoStart(appSettings.recording.auto_start);
+    setRecordingMode(appSettings.recording.default_mode);
     setShowIconPicker(false);
     setError("");
     setConnecting(false);
-  }, []);
+  }, [appSettings.recording.auto_start, appSettings.recording.default_mode]);
 
   const serialPortOptions: { unavailable?: boolean; value: string }[] = serialPorts.map((port) => ({
     value: port,
@@ -663,6 +680,12 @@ export default function NewSessionPage() {
         initialData && initialGroupKey === finalGroupKey
           ? (initialData.sort_order ?? nextSortOrder)
           : nextSortOrder;
+      const recording = recordingUseGlobal
+        ? undefined
+        : {
+            auto_start: recordingAutoStart,
+            mode: recordingMode,
+          };
 
       const connection: SavedConnection = {
         id: initialData?.id || "",
@@ -674,6 +697,7 @@ export default function NewSessionPage() {
         icon: iconKey || undefined,
         icon_auto_detect: currentTab === "ssh" ? iconAutoDetect : false,
         encoding: encoding === "global" ? undefined : encoding,
+        recording,
         ...(currentTab === "ssh"
           ? {
               host: normalizedHost,
@@ -1174,6 +1198,66 @@ export default function NewSessionPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+            </div>
+
+            <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <Label className="text-xs font-medium text-foreground/80">
+                    {t("dialog.connectionRecording")}
+                  </Label>
+                  <p className="mt-0.5 text-[0.6875rem] leading-snug text-muted-foreground">
+                    {t("dialog.connectionRecordingDesc")}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {t("dialog.recordingUseGlobal")}
+                  </span>
+                  <Switch
+                    size="sm"
+                    checked={recordingUseGlobal}
+                    onCheckedChange={setRecordingUseGlobal}
+                  />
+                </div>
+              </div>
+
+              {!recordingUseGlobal && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium">{t("dialog.recordingAutoStart")}</div>
+                      <div className="mt-0.5 text-[0.6875rem] text-muted-foreground">
+                        {t("dialog.recordingAutoStartDesc")}
+                      </div>
+                    </div>
+                    <Switch
+                      size="sm"
+                      checked={recordingAutoStart}
+                      onCheckedChange={setRecordingAutoStart}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-foreground/80">
+                      {t("dialog.recordingMode")}
+                    </Label>
+                    <Select
+                      value={recordingMode}
+                      onValueChange={(value) => setRecordingMode(value as RecordingMode)}
+                    >
+                      <SelectTrigger size="sm" className="h-8 w-full text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="transcript">
+                          {t("dialog.recordingModeTranscript")}
+                        </SelectItem>
+                        <SelectItem value="raw">{t("dialog.recordingModeRaw")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
             </div>
             {/* Messages */}
             {error && (

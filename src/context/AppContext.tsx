@@ -284,6 +284,20 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     tab_middle_click_action: DEFAULT_TAB_MIDDLE_CLICK_ACTION,
     tab_right_click_action: DEFAULT_TAB_RIGHT_CLICK_ACTION,
   },
+  recording: {
+    auto_start: false,
+    default_mode: "transcript",
+    base_path: "",
+    path_template:
+      "{group}/{session}/{yyyy}-{MM}-{dd}/{HH}-{mm}-{ss}-{SSS}-{session_short_id}.log",
+    include_timestamps: true,
+    include_io_labels: true,
+    include_session_metadata: true,
+    rotation: { type: "session" },
+    existing_file_behavior: "unique",
+    memory_limit_bytes: 5 * 1024 * 1024,
+    include_binary_transfer_payloads: false,
+  },
   transfer: {
     editor_type: "external",
     download_threads: 3,

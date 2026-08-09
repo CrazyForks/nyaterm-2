@@ -21,7 +21,7 @@ import type { RemoteNpuOverviewState } from "@/hooks/useRemoteNpuOverview";
 import type { RemoteStatsState } from "@/hooks/useRemoteStats";
 import type { AIOpenIntent } from "@/lib/aiEvents";
 import type { NewSessionTarget } from "@/lib/windowManager";
-import type { SavedConnection, SessionInfo, SessionPane } from "@/types/global";
+import type { RecordingMode, RecordingStatus, SavedConnection, SessionInfo, SessionPane } from "@/types/global";
 
 interface AppPanelContentProps {
   panelId: string | null;
@@ -35,7 +35,7 @@ interface AppPanelContentProps {
   gpuOverviewState: RemoteGpuOverviewState;
   npuMonitorEnabled: boolean;
   npuOverviewState: RemoteNpuOverviewState;
-  recordingSessions: Set<string>;
+  recordingStatuses: RecordingStatus[];
   aiIntent: AIOpenIntent | null;
   transferHeight: number;
   onTransferResize: (delta: number) => void;
@@ -52,7 +52,7 @@ interface AppPanelContentProps {
   onSessionDisconnect: (sessionId: string) => Promise<void> | void;
   canReconnect: (sessionId: string) => boolean;
   onCommandSend: (command: string, execute?: boolean) => void;
-  onToggleSessionRecording: (session: SessionInfo) => Promise<void> | void;
+  onToggleSessionRecording: (session: SessionInfo, mode?: RecordingMode) => Promise<void> | void;
   onSaveSessionTranscript: (session: SessionInfo) => Promise<void> | void;
 }
 
@@ -68,7 +68,7 @@ export default function AppPanelContent({
   gpuOverviewState,
   npuMonitorEnabled,
   npuOverviewState,
-  recordingSessions,
+  recordingStatuses,
   aiIntent,
   transferHeight,
   onTransferResize,
@@ -139,7 +139,7 @@ export default function AppPanelContent({
         return (
           <RecordingPanel
             activeSessionId={activeSessionId}
-            recordingSessions={recordingSessions}
+            recordingStatuses={recordingStatuses}
             onSessionClick={onSessionClick}
             onToggleRecording={onToggleSessionRecording}
             onSaveTranscript={onSaveSessionTranscript}

@@ -30,11 +30,14 @@ pub use quick_commands::{
     QuickCommandsImportResult, QuickCommandsImportSource, QuickCommandsStore,
 };
 pub use recording::{
-    RecordingManager, TerminalHistorySearchRequest, TerminalHistorySearchResponse,
+    ExistingFileBehavior, InputOrigin, InputSensitivity, RecordingContext, RecordingManager,
+    RecordingMode, RecordingProfile, RecordingStatus, RotationPolicy, TerminalHistorySearchRequest,
+    TerminalHistorySearchResponse,
 };
 pub(crate) use session::update_cwd_if_changed;
 pub use session::{
-    SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
+    SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionReadyHook, SessionType,
+    SharedCwd,
 };
 pub use terminal_session::local::{LocalSessionConfig, create_local_session};
 pub use terminal_session::serial::{SerialConfig, create_serial_session, list_serial_ports};

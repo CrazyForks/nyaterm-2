@@ -49,6 +49,7 @@ export interface SessionInfo {
   id: string;
   name: string;
   session_type: SessionType;
+  connection_id?: string | null;
   connected: boolean;
   owner_window_label?: string | null;
   ai_execution_profile: AIExecutionProfile;
@@ -331,6 +332,7 @@ export interface SavedConnection {
   auth?: ConnectionAuth;
   network?: ConnectionNetwork;
   post_login?: ConnectionPostLogin;
+  recording?: ConnectionRecordingSettings;
   ssh_algorithms?: SshAlgorithmPreferences;
   sftp?: SftpSettings;
   asset?: AssetMetadata;
@@ -372,6 +374,48 @@ export interface SavedConnection {
   x11_forwarding?: boolean;
   /** Per-connection encoding override. Empty string means follow global setting. */
   encoding?: string;
+}
+
+export type RecordingMode = "transcript" | "raw";
+export type RecordingState = "starting" | "recording" | "degraded" | "failed" | "stopping";
+export type ExistingFileBehavior = "unique" | "append" | "overwrite";
+export type RotationPolicy =
+  | { type: "session" }
+  | { type: "daily" }
+  | { type: "size"; max_bytes: number };
+
+export interface RecordingSettings {
+  auto_start: boolean;
+  default_mode: RecordingMode;
+  base_path: string;
+  path_template: string;
+  include_timestamps: boolean;
+  include_io_labels: boolean;
+  include_session_metadata: boolean;
+  rotation: RotationPolicy;
+  existing_file_behavior: ExistingFileBehavior;
+  memory_limit_bytes: number;
+  include_binary_transfer_payloads: boolean;
+}
+
+export interface ConnectionRecordingSettings {
+  auto_start?: boolean | null;
+  mode?: RecordingMode | null;
+  path_template?: string | null;
+  include_timestamps?: boolean | null;
+  rotation?: RotationPolicy | null;
+}
+
+export interface RecordingStatus {
+  sessionId: string;
+  state: RecordingState;
+  mode: RecordingMode;
+  filePath: string;
+  startedAt: string;
+  writtenBytes: number;
+  queuedBytes: number;
+  droppedBytes: number;
+  lastError?: string | null;
 }
 
 /** Stored OTP entry for two-factor authentication. */
@@ -1416,6 +1460,7 @@ export interface AppSettings {
   security: SecuritySettings;
   terminal: TerminalSettings;
   interaction: InteractionSettings;
+  recording: RecordingSettings;
   transfer: TransferSettings;
   diagnostics: DiagnosticsSettings;
   ai: AISettings;

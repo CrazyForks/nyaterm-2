@@ -633,9 +633,6 @@ pub(super) async fn ssh_io_loop(
                         if backspace_as_bs {
                             remap_del_to_bs(&mut data);
                         }
-                        if let Some(ref recorder) = recording_mgr {
-                            recorder.write_input(&session_id, &data);
-                        }
                         let send_data = encode_terminal_input(&data, &encoding);
                         let _ = channel.data(&send_data[..]).await;
                     }
@@ -742,6 +739,9 @@ pub(super) async fn ssh_io_loop(
                                 ZmodemDetectResult::Detected { direction, passthrough, initial_bytes } => {
                                     // Forward any pre-header bytes to the terminal.
                                     if !passthrough.is_empty() {
+                                        if let Some(ref recorder) = recording_mgr {
+                                            recorder.write_raw_output(&session_id, &passthrough);
+                                        }
                                         let pre = output_decoder.decode(&passthrough);
                                         if !pre.is_empty() {
                                             output.push_owned(pre);
@@ -774,6 +774,9 @@ pub(super) async fn ssh_io_loop(
                                     continue;
                                 }
                                 ZmodemDetectResult::NoMatch { passthrough } => {
+                                    if let Some(ref recorder) = recording_mgr {
+                                        recorder.write_raw_output(&session_id, &passthrough);
+                                    }
                                     let text = output_decoder.decode(&passthrough);
                                     let mut result = stripper.push(&text);
 
@@ -807,6 +810,9 @@ pub(super) async fn ssh_io_loop(
                             }
                     }
                     Some(ChannelMsg::ExtendedData { ref data, .. }) => {
+                        if let Some(ref recorder) = recording_mgr {
+                            recorder.write_raw_output(&session_id, data);
+                        }
                         let text = output_decoder.decode(data);
                         if let Some(ref recorder) = recording_mgr {
                             recorder.write_output(&session_id, &text);
@@ -905,9 +911,6 @@ pub(super) async fn ssh_io_loop(
                     continue;
                 }
                 if let Some(pending) = pending_post_login.take() {
-                    if let Some(ref recorder) = recording_mgr {
-                        recorder.write_input(&session_id, &pending.input);
-                    }
                     let _ = channel.data(&pending.input[..]).await;
                     tracing::info!(
                         session_id = %session_id,
@@ -922,9 +925,6 @@ pub(super) async fn ssh_io_loop(
                     continue;
                 }
                 if let Some(pending) = pending_startup_command.take() {
-                    if let Some(ref recorder) = recording_mgr {
-                        recorder.write_input(&session_id, &pending.input);
-                    }
                     let _ = channel.data(&pending.input[..]).await;
                     tracing::info!(
                         session_id = %session_id,

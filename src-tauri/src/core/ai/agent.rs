@@ -393,6 +393,8 @@ async fn send_command_without_capture(
             SessionCommand::Write {
                 data: bytes,
                 automated: true,
+                origin: crate::core::InputOrigin::AiAgent,
+                sensitivity: crate::core::InputSensitivity::Normal,
             },
         )
         .await?;
@@ -1821,6 +1823,7 @@ mod tests {
                     id: "serial-1".to_string(),
                     name: "serial-1".to_string(),
                     session_type: SessionType::Serial,
+                    connection_id: None,
                     connected: true,
                     owner_window_label: None,
                     ai_execution_profile: AiExecutionProfile::SendOnly,

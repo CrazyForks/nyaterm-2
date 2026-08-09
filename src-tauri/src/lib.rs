@@ -103,6 +103,7 @@ pub fn run() {
             app::setup(
                 a,
                 session_manager,
+                recording_manager,
                 quick_commands_store,
                 cloud_sync_manager,
                 runtime_for_setup.clone(),
@@ -199,6 +200,10 @@ pub fn run() {
             cmd::session::save_session_transcript,
             cmd::session::terminal_history_search,
             cmd::session::list_recording_sessions,
+            cmd::session::get_recording_status,
+            cmd::session::list_recording_statuses,
+            cmd::session::open_recording_file,
+            cmd::session::show_recording_in_folder,
             cmd::session::set_recording_memory_limit,
             cmd::session::submit_otp_response,
             cmd::session::cancel_otp_request,

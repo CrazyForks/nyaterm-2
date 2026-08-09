@@ -2,6 +2,7 @@ use super::{
     ProxyConfig, ProxySettings, load_app_settings, load_proxies, save_app_settings, save_proxies,
     uuid_v4,
 };
+use crate::core::{RecordingMode, RotationPolicy};
 use crate::error::{AppError, AppResult};
 use crate::storage;
 use serde::{Deserialize, Serialize};
@@ -322,6 +323,20 @@ fn default_post_login_delay_ms() -> u64 {
     1000
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ConnectionRecordingSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_start: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<RecordingMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_template: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_timestamps: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<RotationPolicy>,
+}
+
 // ── Static asset metadata ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -456,6 +471,8 @@ pub struct SavedConnection {
     pub network: Option<ConnectionNetwork>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_login: Option<ConnectionPostLogin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recording: Option<ConnectionRecordingSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ssh_algorithms: Option<SshAlgorithmPreferences>,
     #[serde(default, skip_serializing_if = "is_default_sftp_settings")]

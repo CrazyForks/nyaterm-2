@@ -295,6 +295,7 @@ mod tests {
                     auth: None,
                     network: None,
                     post_login: None,
+                    recording: None,
                     ssh_algorithms: None,
                     sftp: config::SftpSettings::default(),
                     asset: None,
@@ -323,6 +324,7 @@ mod tests {
                     auth: None,
                     network: None,
                     post_login: None,
+                    recording: None,
                     ssh_algorithms: None,
                     sftp: config::SftpSettings::default(),
                     asset: None,
@@ -356,6 +358,7 @@ mod tests {
                 auth: None,
                 network: None,
                 post_login: None,
+                recording: None,
                 ssh_algorithms: None,
                 sftp: config::SftpSettings::default(),
                 asset: Some(config::AssetMetadata {
