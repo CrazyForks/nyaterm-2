@@ -577,7 +577,7 @@ export default function XTerminal({
 
   // Shell integration state
   const { shellIntegrationRef } = useShellIntegration();
-  const canShowCommandSuggestions = useCallback(() => {
+  const canShowCommandSuggestions = useCallback((options?: { allowEmpty?: boolean }) => {
     if (credentialPromptInputUntilRef.current > Date.now()) {
       return false;
     }
@@ -599,6 +599,14 @@ export default function XTerminal({
     }
     if (isPagerSearchOrCommandInput(inputState.value)) {
       return false;
+    }
+
+    if (options?.allowEmpty) {
+      return (
+        !inputState.desynced &&
+        !inputState.multiline &&
+        inputState.cursor === inputState.value.length
+      );
     }
 
     return canSuggestFromTracker(inputState);
@@ -1215,6 +1223,14 @@ export default function XTerminal({
 
       const kb = terminalAppSettingsRef.current.keybindings;
 
+      if (matchesKeyEvent(resolveShortcutKeys("terminal.showCommandSuggestions", kb), e)) {
+        e.preventDefault();
+        if (!disconnectedRef.current) {
+          triggerSearch({ manual: true });
+        }
+        return false;
+      }
+
       if (
         disconnectedRef.current &&
         e.ctrlKey &&
@@ -1546,6 +1562,7 @@ export default function XTerminal({
         "view.openChat",
         "view.showAllCommands",
         "terminal.manageSyncGroups",
+        "terminal.showCommandSuggestions",
         "special.lockScreen",
       ];
       for (const sid of swallowIds) {
@@ -3123,7 +3140,11 @@ export default function XTerminal({
 
         <CommandSuggestions
           suggestions={suggestions}
-          visible={commandSuggestionsEnabled && showSuggestions && canShowCommandSuggestions()}
+          visible={
+            commandSuggestionsEnabled &&
+            showSuggestions &&
+            canShowCommandSuggestions({ allowEmpty: suggestions.length > 0 })
+          }
           selectedIndex={selectedIndex}
           cursorPosition={cursorPosition}
           onSelect={handleSelectSuggestion}
