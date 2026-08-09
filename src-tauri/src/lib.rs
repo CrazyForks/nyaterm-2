@@ -261,6 +261,7 @@ pub fn run() {
             cmd::connection::delete_group,
             cmd::connection::clear_all_connections,
             cmd::connection::get_quick_commands,
+            cmd::connection::export_quick_commands,
             cmd::connection::save_quick_commands,
             cmd::connection::upsert_quick_command,
             cmd::connection::increment_quick_command_use_count,

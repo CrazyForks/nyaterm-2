@@ -1267,6 +1267,86 @@ pub fn get_quick_commands(
     Ok(state.snapshot())
 }
 
+#[derive(serde::Serialize)]
+struct QuickCommandsExportConfig {
+    categories: Vec<QuickCommandCategoryExport>,
+    commands: Vec<QuickCommandExport>,
+}
+
+#[derive(serde::Serialize)]
+struct QuickCommandCategoryExport {
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_id: Option<String>,
+    sort_order: i32,
+}
+
+#[derive(serde::Serialize)]
+struct QuickCommandExport {
+    id: String,
+    label: String,
+    command: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    icon_tag: Option<String>,
+    pinned: bool,
+    execution_mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    risk_level: Option<String>,
+}
+
+impl From<QuickCommandsConfig> for QuickCommandsExportConfig {
+    fn from(config: QuickCommandsConfig) -> Self {
+        Self {
+            categories: config
+                .categories
+                .into_iter()
+                .map(|category| QuickCommandCategoryExport {
+                    id: category.id,
+                    name: category.name,
+                    parent_id: category.parent_id,
+                    sort_order: category.sort_order,
+                })
+                .collect(),
+            commands: config
+                .commands
+                .into_iter()
+                .map(|command| QuickCommandExport {
+                    id: command.id,
+                    label: command.label,
+                    command: command.command,
+                    category_id: command.category_id,
+                    description: command.description,
+                    color_tag: command.color_tag,
+                    icon_tag: command.icon_tag,
+                    pinned: command.pinned,
+                    execution_mode: command.execution_mode,
+                    source: command.source,
+                    risk_level: command.risk_level,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn export_quick_commands(output_path: String, config: QuickCommandsConfig) -> AppResult<()> {
+    let export_config = QuickCommandsExportConfig::from(config);
+    let raw = serde_json::to_string_pretty(&export_config).map_err(|error| {
+        AppError::Config(format!("Failed to serialize quick commands: {error}"))
+    })?;
+    std::fs::write(output_path, raw)
+        .map_err(|error| AppError::Config(format!("Failed to write quick commands file: {error}")))
+}
+
 #[tauri::command]
 pub fn save_quick_commands(
     app: tauri::AppHandle,
