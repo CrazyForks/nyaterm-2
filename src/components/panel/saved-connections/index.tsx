@@ -1433,27 +1433,6 @@ export default function SavedConnections({
               />
             </HeaderActionButton>
 
-            {savedGroups.length > 0 && (
-              <HeaderActionButton
-                variant="ghost"
-                size="icon-sm"
-                className="shrink-0 h-6 w-6 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
-                style={{ color: "var(--df-text-muted)" }}
-                tooltip={
-                  allGroupsExpanded
-                    ? t("savedConnections.collapseAllFolders")
-                    : t("savedConnections.expandAllFolders")
-                }
-                onClick={allGroupsExpanded ? collapseAllGroups : expandAllGroups}
-              >
-                {allGroupsExpanded ? (
-                  <MdUnfoldLess className="text-[1rem]" />
-                ) : (
-                  <MdUnfoldMore className="text-[1rem]" />
-                )}
-              </HeaderActionButton>
-            )}
-
             <HeaderActionButton
               variant="ghost"
               size="icon-sm"
@@ -1499,7 +1478,25 @@ export default function SavedConnections({
                   <MdMoreVert className="text-[1.125rem]" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs w-40">
+              <DropdownMenuContent align="end" className="text-xs w-48">
+                {savedGroups.length > 0 && (
+                  <>
+                    <DropdownMenuItem
+                      onClick={allGroupsExpanded ? collapseAllGroups : expandAllGroups}
+                      className="cursor-pointer gap-2 py-1.5 focus:bg-[var(--df-bg-hover)]"
+                    >
+                      {allGroupsExpanded ? (
+                        <MdUnfoldLess className="text-sm text-[var(--df-text-muted)]" />
+                      ) : (
+                        <MdUnfoldMore className="text-sm text-[var(--df-text-muted)]" />
+                      )}
+                      {allGroupsExpanded
+                        ? t("savedConnections.collapseAllFolders")
+                        : t("savedConnections.expandAllFolders")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem
                   onClick={handleExport}
                   className="cursor-pointer gap-2 py-1.5 focus:bg-[var(--df-bg-hover)]"
