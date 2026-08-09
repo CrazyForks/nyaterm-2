@@ -2121,6 +2121,7 @@
       "renameFile": "重新命名檔案/目錄",
       "resetZoom": "重置縮放",
       "showAllCommands": "顯示所有命令",
+      "showCommandSuggestions": "顯示命令聯想",
       "switchTab": "切換到標籤 1-9",
       "temporarySshLink": "臨時連結",
       "toggleLeftSidebar": "切換左側邊欄",

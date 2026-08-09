@@ -2123,6 +2123,7 @@
       "renameFile": "파일/폴더 이름 바꾸기",
       "resetZoom": "확대/축소 재설정",
       "showAllCommands": "모든 명령 표시",
+      "showCommandSuggestions": "명령 제안 표시",
       "switchTab": "1-9번 탭으로 전환",
       "temporarySshLink": "임시 링크",
       "toggleLeftSidebar": "왼쪽 사이드바 전환",

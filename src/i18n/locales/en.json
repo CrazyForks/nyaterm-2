@@ -2127,6 +2127,7 @@
       "renameFile": "Rename File/Folder",
       "resetZoom": "Reset Zoom",
       "showAllCommands": "Show All Commands",
+      "showCommandSuggestions": "Show Command Suggestions",
       "switchTab": "Switch to Tab 1-9",
       "temporarySshLink": "Temporary Link",
       "toggleLeftSidebar": "Toggle Left Sidebar",
