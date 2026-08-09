@@ -983,7 +983,6 @@ function App() {
         updateTabSession(tabId, sessionId);
         focusTerminalSession(sessionId);
         recordRecentConnection(connection.id);
-        updateUi({ saved_connections_last_opened_connection_id: connection.id });
         updateAutoIconForSessionStart(connection.id, sessionId);
       } catch (error) {
         if (isSessionCreationCancelled(error) || !hasTab(tabId)) {
@@ -1011,7 +1010,6 @@ function App() {
       t,
       updateAutoIconForSessionStart,
       updateTabSession,
-      updateUi,
     ],
   );
 
