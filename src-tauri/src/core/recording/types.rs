@@ -118,27 +118,3 @@ pub struct RecordingProfile {
     pub existing_file_behavior: ExistingFileBehavior,
     pub include_binary_transfer_payloads: bool,
 }
-
-impl RecordingProfile {
-    pub fn explicit_transcript(
-        path: PathBuf,
-        include_io_labels: bool,
-        include_timestamps: bool,
-    ) -> Self {
-        Self {
-            mode: RecordingMode::Transcript,
-            base_path: path.parent().map_or_else(PathBuf::new, Path::to_path_buf),
-            path_template: path
-                .file_name()
-                .map(|name| name.to_string_lossy().to_string())
-                .unwrap_or_else(|| "recording-{session_id}.log".to_string()),
-            include_timestamps,
-            include_io_labels,
-            include_session_metadata: false,
-            rotation: RotationPolicy::Session,
-            existing_file_behavior: ExistingFileBehavior::Overwrite,
-            include_binary_transfer_payloads: false,
-        }
-    }
-}
-

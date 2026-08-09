@@ -321,6 +321,7 @@ fn chrono_timestamp() -> String {
     .unwrap_or_else(|_| "1970-01-01 00:00:00.000".to_string())
 }
 
+#[cfg(test)]
 fn consume_matching_prefix(prefix_buffer: &mut String, text: &str) -> usize {
     let mut prefix_idx = 0;
     let mut text_idx = 0;

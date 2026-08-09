@@ -116,6 +116,7 @@ fn context_records(
         .collect()
 }
 
+#[cfg(test)]
 fn strip_terminal_control_sequences(text: &str) -> String {
     let replayed = replay_terminal_output(text, "", 0);
     let mut out = String::with_capacity(text.len());

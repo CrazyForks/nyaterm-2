@@ -17,35 +17,6 @@ impl RecordingManager {
         let _ = self.app_handle.set(app);
     }
 
-    pub fn start(
-        &self,
-        session_id: &str,
-        file_path: &str,
-        include_io_labels: bool,
-        include_timestamps: bool,
-    ) -> AppResult<()> {
-        let explicit_path = PathBuf::from(file_path);
-        let profile = RecordingProfile::explicit_transcript(
-            explicit_path.clone(),
-            include_io_labels,
-            include_timestamps,
-        );
-        let context = RecordingContext {
-            session_id: session_id.to_string(),
-            session_name: session_id.to_string(),
-            connection_id: None,
-            connection_name: None,
-            group_path: None,
-            protocol: "terminal".to_string(),
-            host: None,
-            port: None,
-            username: None,
-            started_at: OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc()),
-        };
-        self.start_with_profile(session_id, context, profile, Some(explicit_path))
-            .map(|_| ())
-    }
-
     pub fn start_with_profile(
         &self,
         session_id: &str,
@@ -79,9 +50,10 @@ impl RecordingManager {
             }
             _ => None,
         };
+        let mode = profile.mode;
         let sink = RecordingSink::start(
             session_id,
-            profile.mode,
+            mode,
             path,
             profile.existing_file_behavior,
             self.app_handle.get(),
@@ -92,6 +64,18 @@ impl RecordingManager {
         runtime.context = Some(context);
         runtime.profile = Some(profile);
         runtime.sink = Some(sink);
+        drop(runtime);
+
+        self.record_system(
+            session_id,
+            format!(
+                "Recording started ({})",
+                match mode {
+                    RecordingMode::Transcript => "transcript",
+                    RecordingMode::Raw => "raw",
+                }
+            ),
+        );
         Ok(actual_path)
     }
 
@@ -298,6 +282,7 @@ impl RecordingManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn write_input(&self, _session_id: &str, _data: &[u8]) {
         // Keystrokes are intentionally not recorded. Commands enter transcript
         // only through record_command_submission after submission/confirmation.
