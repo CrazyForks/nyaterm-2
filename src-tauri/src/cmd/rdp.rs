@@ -41,6 +41,14 @@ pub async fn rdp_input_batch(
 }
 
 #[tauri::command]
+pub async fn rdp_set_keyboard_capture(
+    state: tauri::State<'_, Arc<RdpSessionManager>>,
+    session_id: Option<String>,
+) -> AppResult<()> {
+    crate::core::rdp_keyboard_capture::set_keyboard_capture(state.inner().clone(), session_id)
+}
+
+#[tauri::command]
 pub async fn rdp_resize(
     state: tauri::State<'_, Arc<RdpSessionManager>>,
     session_id: String,

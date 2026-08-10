@@ -17,10 +17,25 @@ const PHYSICAL_TEXT_KEYS = new Set([
   "ArrowDown",
 ]);
 
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
+
 export function shouldUsePhysicalRdpKey(
   event: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "metaKey">,
 ) {
-  return event.ctrlKey || event.altKey || event.metaKey || PHYSICAL_TEXT_KEYS.has(event.key);
+  return (
+    event.ctrlKey ||
+    event.altKey ||
+    event.metaKey ||
+    MODIFIER_KEYS.has(event.key) ||
+    PHYSICAL_TEXT_KEYS.has(event.key)
+  );
+}
+
+export function shouldFallbackToPrintableRdpKey(
+  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "metaKey" | "isComposing">,
+) {
+  if (event.isComposing || shouldUsePhysicalRdpKey(event)) return false;
+  return event.key.length === 1;
 }
 
 export function buildRdpUnicodeInput(text: string): RdpInputEvent[] {
@@ -37,4 +52,9 @@ export function rdpBeforeInputText(
 
 export function rdpCompositionCommitText(text: string): string | null {
   return text.length > 0 ? text : null;
+}
+
+export function rdpInputFallbackText(value: string, composing: boolean): string | null {
+  if (composing) return null;
+  return value.length > 0 ? value : null;
 }

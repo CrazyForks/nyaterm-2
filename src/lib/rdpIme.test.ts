@@ -3,6 +3,8 @@ import {
   buildRdpUnicodeInput,
   rdpBeforeInputText,
   rdpCompositionCommitText,
+  rdpInputFallbackText,
+  shouldFallbackToPrintableRdpKey,
   shouldUsePhysicalRdpKey,
 } from "./rdpIme";
 
@@ -48,10 +50,63 @@ describe("rdpIme", () => {
     ).toBe(true);
     expect(
       shouldUsePhysicalRdpKey({
+        key: "Shift",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldUsePhysicalRdpKey({
         key: "a",
         ctrlKey: false,
         altKey: false,
         metaKey: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("uses input fallback text only outside composition", () => {
+    expect(rdpInputFallbackText("abc", false)).toBe("abc");
+    expect(rdpInputFallbackText("", false)).toBeNull();
+    expect(rdpInputFallbackText("ni", true)).toBeNull();
+  });
+
+  it("falls back to printable physical keys only for plain text keys", () => {
+    expect(
+      shouldFallbackToPrintableRdpKey({
+        key: "a",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldFallbackToPrintableRdpKey({
+        key: "ArrowLeft",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFallbackToPrintableRdpKey({
+        key: "Shift",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFallbackToPrintableRdpKey({
+        key: "c",
+        ctrlKey: true,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
       }),
     ).toBe(false);
   });

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Maximize2, Monitor, Power, RotateCcw, Send, ShieldAlert } from "lucide-react";
 import {
   memo,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -18,6 +19,8 @@ import {
   buildRdpUnicodeInput,
   rdpBeforeInputText,
   rdpCompositionCommitText,
+  rdpInputFallbackText,
+  shouldFallbackToPrintableRdpKey,
   shouldUsePhysicalRdpKey,
 } from "@/lib/rdpIme";
 import { buildRdpKeyEvent, type RdpInputEvent } from "@/lib/rdpInput";
@@ -352,6 +355,8 @@ function RdpPaneHost({
   const rendererRef = useRef<RdpCanvasRenderer | null>(null);
   const pressedKeysRef = useRef(new Set<string>());
   const composingRef = useRef(false);
+  const printableFallbackTimersRef = useRef(new Set<number>());
+  const suppressNextInputTextRef = useRef<string | null>(null);
   const pendingMouseMoveRef = useRef<{ x: number; y: number } | null>(null);
   const mouseRafRef = useRef<number | null>(null);
   const cursorRafRef = useRef<number | null>(null);
@@ -379,6 +384,44 @@ function RdpPaneHost({
     pressedKeysRef.current.clear();
     void sendInputBatch([{ type: "release-all-keys" }]);
   }, [sendInputBatch]);
+
+  const cancelPrintableKeyFallbacks = useCallback(() => {
+    for (const timer of printableFallbackTimersRef.current) {
+      window.clearTimeout(timer);
+    }
+    printableFallbackTimersRef.current.clear();
+  }, []);
+
+  const sendUnicodeInput = useCallback(
+    (text: string) => {
+      const events = buildRdpUnicodeInput(text);
+      if (events.length === 0) return;
+      cancelPrintableKeyFallbacks();
+      void sendInputBatch(events);
+    },
+    [cancelPrintableKeyFallbacks, sendInputBatch],
+  );
+
+  const schedulePrintableKeyFallback = useCallback(
+    (event: KeyboardEvent) => {
+      if (!shouldFallbackToPrintableRdpKey(event)) return false;
+      const keyDown = buildRdpKeyEvent(event, "key-down");
+      if (!keyDown || !("scanCode" in keyDown)) return false;
+      const keyUp: RdpInputEvent = {
+        type: "key-up",
+        scanCode: keyDown.scanCode,
+        extended: keyDown.extended,
+        repeat: false,
+      };
+      const timer = window.setTimeout(() => {
+        printableFallbackTimersRef.current.delete(timer);
+        void sendInputBatch([keyDown, keyUp]);
+      }, 80);
+      printableFallbackTimersRef.current.add(timer);
+      return true;
+    },
+    [sendInputBatch],
+  );
 
   useEffect(() => {
     didPrimeResizeRef.current = false;
@@ -557,9 +600,40 @@ function RdpPaneHost({
     window.addEventListener("blur", releaseAllKeys);
     return () => {
       window.removeEventListener("blur", releaseAllKeys);
+      cancelPrintableKeyFallbacks();
       releaseAllKeys();
     };
-  }, [releaseAllKeys]);
+  }, [cancelPrintableKeyFallbacks, releaseAllKeys]);
+
+  useEffect(() => {
+    if (!active || !visible || pane.connecting || pane.connectError || state !== "active") {
+      void invoke("rdp_set_keyboard_capture", { sessionId: null }).catch(() => {});
+      return;
+    }
+
+    const container = containerRef.current;
+    if (container?.contains(document.activeElement)) {
+      void invoke("rdp_set_keyboard_capture", { sessionId: pane.sessionId }).catch(() => {});
+    }
+
+    return () => {
+      void invoke("rdp_set_keyboard_capture", { sessionId: null }).catch(() => {});
+    };
+  }, [active, pane.connectError, pane.connecting, pane.sessionId, state, visible]);
+
+  const handleFocus = useCallback(() => {
+    if (!active || !visible || pane.connecting || pane.connectError || state !== "active") return;
+    void invoke("rdp_set_keyboard_capture", { sessionId: pane.sessionId }).catch(() => {});
+  }, [active, pane.connectError, pane.connecting, pane.sessionId, state, visible]);
+
+  const handleBlur = useCallback(
+    (event: ReactFocusEvent<HTMLElement>) => {
+      if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+      void invoke("rdp_set_keyboard_capture", { sessionId: null }).catch(() => {});
+      releaseAllKeys();
+    },
+    [releaseAllKeys],
+  );
 
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -585,6 +659,19 @@ function RdpPaneHost({
       void sendInputBatch([inputEvent]);
     },
     [sendInputBatch],
+  );
+
+  const handleRdpKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (shouldUsePhysicalRdpKey(event.nativeEvent)) {
+        handleKeyDown(event);
+        return;
+      }
+      if (schedulePrintableKeyFallback(event.nativeEvent)) {
+        event.stopPropagation();
+      }
+    },
+    [handleKeyDown, schedulePrintableKeyFallback],
   );
 
   const flushMouseMove = useCallback(() => {
@@ -623,10 +710,12 @@ function RdpPaneHost({
     <div
       ref={containerRef}
       className="group relative flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden bg-black outline-none"
+      data-rdp-input-root="true"
       tabIndex={active ? 0 : -1}
-      onKeyDown={handleKeyDown}
+      onFocus={handleFocus}
+      onKeyDown={handleRdpKeyDown}
       onKeyUp={handleKeyUp}
-      onBlur={releaseAllKeys}
+      onBlur={handleBlur}
       onPointerDown={() => imeRef.current?.focus({ preventScroll: true })}
     >
       <textarea
@@ -642,18 +731,31 @@ function RdpPaneHost({
           composingRef.current = false;
           const text = rdpCompositionCommitText(event.data || event.currentTarget.value);
           event.currentTarget.value = "";
-          if (text) void sendInputBatch(buildRdpUnicodeInput(text));
+          if (text) {
+            suppressNextInputTextRef.current = text;
+            sendUnicodeInput(text);
+          }
         }}
         onBeforeInput={(event) => {
           const text = rdpBeforeInputText(event.nativeEvent as InputEvent);
           if (!text || composingRef.current) return;
           event.preventDefault();
           event.currentTarget.value = "";
-          void sendInputBatch(buildRdpUnicodeInput(text));
+          sendUnicodeInput(text);
+        }}
+        onInput={(event) => {
+          const text = rdpInputFallbackText(event.currentTarget.value, composingRef.current);
+          if (!text) return;
+          event.currentTarget.value = "";
+          if (suppressNextInputTextRef.current === text) {
+            suppressNextInputTextRef.current = null;
+            return;
+          }
+          suppressNextInputTextRef.current = null;
+          sendUnicodeInput(text);
         }}
         onKeyDown={(event) => {
-          if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
-          handleKeyDown(event);
+          handleRdpKeyDown(event);
         }}
         onKeyUp={(event) => {
           if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
