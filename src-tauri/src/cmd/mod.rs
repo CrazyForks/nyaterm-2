@@ -17,6 +17,7 @@ pub mod note;
 pub mod otp;
 pub mod process;
 pub mod proxy;
+pub mod rdp;
 pub mod session;
 pub mod settings;
 pub mod sftp;
