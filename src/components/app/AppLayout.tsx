@@ -12,6 +12,8 @@ import type { OtpRequest } from "@/components/dialog/connections/OtpDialog";
 import { OtpDialog } from "@/components/dialog/connections/OtpDialog";
 import type { SshAuthRequest } from "@/components/dialog/connections/SshAuthDialog";
 import { SshAuthDialog } from "@/components/dialog/connections/SshAuthDialog";
+import type { SshAgentAuthRequest } from "@/components/dialog/connections/SshAgentAuthDialog";
+import { SshAgentAuthDialog } from "@/components/dialog/connections/SshAgentAuthDialog";
 import DockerSudoPasswordDialog, {
   type DockerSudoPasswordRequest,
 } from "@/components/dialog/docker/DockerSudoPasswordDialog";
@@ -123,10 +125,12 @@ interface AppLayoutProps {
     onOtpDone: (requestId: string) => void;
     sshAuthRequest: SshAuthRequest | null;
     onSshAuthDone: (requestId: string) => void;
+    sshAgentAuthRequest: SshAgentAuthRequest | null;
+    onSshAgentAuthDone: (requestId: string) => void;
     dockerSudoPasswordRequest: DockerSudoPasswordRequest | null;
     onDockerSudoPasswordDone: (requestId: string) => void;
     hostKeyVerifyRequest: HostKeyVerifyRequest | null;
-    onHostKeyVerifyDone: () => void;
+    onHostKeyVerifyDone: (requestId: string) => void;
     modalChildWindowCount: number;
     locked: boolean;
     hasMasterPassword: boolean;
@@ -511,6 +515,10 @@ export default function AppLayout({
 
         <OtpDialog request={dialogs.otpRequest} onDone={dialogs.onOtpDone} />
         <SshAuthDialog request={dialogs.sshAuthRequest} onDone={dialogs.onSshAuthDone} />
+        <SshAgentAuthDialog
+          request={dialogs.sshAgentAuthRequest}
+          onDone={dialogs.onSshAgentAuthDone}
+        />
         <DockerSudoPasswordDialog
           request={dialogs.dockerSudoPasswordRequest}
           onDone={dialogs.onDockerSudoPasswordDone}

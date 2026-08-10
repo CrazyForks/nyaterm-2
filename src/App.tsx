@@ -10,6 +10,7 @@ import ExternalConnectionMatchDialog from "./components/dialog/connections/Exter
 import type { HostKeyVerifyRequest } from "./components/dialog/connections/HostKeyVerifyDialog";
 import type { OtpRequest } from "./components/dialog/connections/OtpDialog";
 import type { SshAuthRequest } from "./components/dialog/connections/SshAuthDialog";
+import type { SshAgentAuthRequest } from "./components/dialog/connections/SshAgentAuthDialog";
 import TemporarySshLinkDialog from "./components/dialog/connections/TemporarySshLinkDialog";
 import type { DockerSudoPasswordRequest } from "./components/dialog/docker/DockerSudoPasswordDialog";
 import SessionQuickSwitcher, {
@@ -39,6 +40,23 @@ import { useRemoteStats } from "./hooks/useRemoteStats";
 import { resolveDisplayKeys } from "./hooks/useShortcutMap";
 import { useTerminalZoom } from "./hooks/useTerminalZoom";
 import { useTabStatusIndicators } from "./hooks/useUnreadTabs";
+
+type SecurityPrompt =
+  | { kind: "host-key"; request: HostKeyVerifyRequest }
+  | { kind: "ssh-agent"; request: SshAgentAuthRequest }
+  | { kind: "otp"; request: OtpRequest }
+  | { kind: "ssh-auth"; request: SshAuthRequest };
+
+function upsertSecurityPrompt(
+  current: SecurityPrompt[],
+  prompt: SecurityPrompt,
+): SecurityPrompt[] {
+  const index = current.findIndex((item) => item.request.requestId === prompt.request.requestId);
+  if (index < 0) return [...current, prompt];
+  const next = [...current];
+  next[index] = prompt;
+  return next;
+}
 import { AI_OPEN_EVENT, type AIOpenIntent } from "./lib/aiEvents";
 import {
   buildPanelOpenUpdate,
@@ -511,14 +529,9 @@ function App() {
     });
   }, [appSettings.recording.memory_limit_bytes, settingsLoaded]);
 
-  // OTP / 2FA dialog state
-  const [otpRequest, setOtpRequest] = useState<OtpRequest | null>(null);
-  const [sshAuthRequest, setSshAuthRequest] = useState<SshAuthRequest | null>(null);
+  const [securityPromptQueue, setSecurityPromptQueue] = useState<SecurityPrompt[]>([]);
   const [dockerSudoPasswordRequest, setDockerSudoPasswordRequest] =
     useState<DockerSudoPasswordRequest | null>(null);
-  const [hostKeyVerifyRequest, setHostKeyVerifyRequest] = useState<HostKeyVerifyRequest | null>(
-    null,
-  );
   const lastCloudConflictRevisionRef = useRef<string | null>(null);
   const modalChildWindowCount = useModalChildWindows();
 
@@ -608,14 +621,58 @@ function App() {
     unsubs.push(
       listen<OtpRequest>("otp-request", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
-        setOtpRequest(event.payload);
+        setSecurityPromptQueue((current) => upsertSecurityPrompt(current, {
+          kind: "otp",
+          request: event.payload,
+        }));
       }),
     );
 
     unsubs.push(
       listen<SshAuthRequest>("ssh-auth-request", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
-        setSshAuthRequest(event.payload);
+        setSecurityPromptQueue((current) => upsertSecurityPrompt(current, {
+          kind: "ssh-auth",
+          request: event.payload,
+        }));
+      }),
+    );
+
+    unsubs.push(
+      listen<SshAgentAuthRequest>("ssh-agent-auth-pending", (event) => {
+        if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
+        setSecurityPromptQueue((current) =>
+          upsertSecurityPrompt(current, { kind: "ssh-agent", request: event.payload }),
+        );
+      }),
+    );
+    unsubs.push(
+      listen<SshAgentAuthRequest>("ssh-agent-auth-failed", (event) => {
+        if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
+        setSecurityPromptQueue((current) =>
+          upsertSecurityPrompt(current, { kind: "ssh-agent", request: event.payload }),
+        );
+      }),
+    );
+    unsubs.push(
+      listen<{ requestId: string }>("ssh-agent-auth-resolved", (event) => {
+        setSecurityPromptQueue((current) =>
+          current.filter((item) => item.request.requestId !== event.payload.requestId),
+        );
+      }),
+    );
+    unsubs.push(
+      listen<{ requestId: string }>("host-key-verify-resolved", (event) => {
+        setSecurityPromptQueue((current) =>
+          current.filter((item) => item.request.requestId !== event.payload.requestId),
+        );
+      }),
+    );
+    unsubs.push(
+      listen<{ requestId: string }>("security-prompt-resolved", (event) => {
+        setSecurityPromptQueue((current) =>
+          current.filter((item) => item.request.requestId !== event.payload.requestId),
+        );
       }),
     );
 
@@ -629,7 +686,9 @@ function App() {
     unsubs.push(
       listen<HostKeyVerifyRequest>("host-key-verify", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
-        setHostKeyVerifyRequest(event.payload);
+        setSecurityPromptQueue((current) =>
+          upsertSecurityPrompt(current, { kind: "host-key", request: event.payload }),
+        );
       }),
     );
 
@@ -3267,6 +3326,20 @@ function App() {
     });
   }, []);
 
+  const activeSecurityPrompt = securityPromptQueue[0] ?? null;
+  const activeHostKeyRequest =
+    activeSecurityPrompt?.kind === "host-key" ? activeSecurityPrompt.request : null;
+  const activeSshAgentRequest =
+    activeSecurityPrompt?.kind === "ssh-agent" ? activeSecurityPrompt.request : null;
+  const activeOtpRequest = activeSecurityPrompt?.kind === "otp" ? activeSecurityPrompt.request : null;
+  const activeSshAuthRequest =
+    activeSecurityPrompt?.kind === "ssh-auth" ? activeSecurityPrompt.request : null;
+  const removeSecurityPrompt = (requestId: string) => {
+    setSecurityPromptQueue((current) =>
+      current.filter((item) => item.request.requestId !== requestId),
+    );
+  };
+
   return (
     <TransferProvider>
       <AppLayout
@@ -3412,19 +3485,19 @@ function App() {
           quitConfirmOpen: showQuitConfirm,
           onQuitConfirmOpenChange: setShowQuitConfirm,
           onQuitConfirm: handleQuitApplication,
-          otpRequest,
-          onOtpDone: (requestId) =>
-            setOtpRequest((current) => (current?.requestId === requestId ? null : current)),
-          sshAuthRequest,
-          onSshAuthDone: (requestId) =>
-            setSshAuthRequest((current) => (current?.requestId === requestId ? null : current)),
+          otpRequest: activeOtpRequest,
+          onOtpDone: removeSecurityPrompt,
+          sshAuthRequest: activeSshAuthRequest,
+          onSshAuthDone: removeSecurityPrompt,
+          sshAgentAuthRequest: activeSshAgentRequest,
+          onSshAgentAuthDone: removeSecurityPrompt,
           dockerSudoPasswordRequest,
           onDockerSudoPasswordDone: (requestId) =>
             setDockerSudoPasswordRequest((current) =>
               current?.requestId === requestId ? null : current,
             ),
-          hostKeyVerifyRequest,
-          onHostKeyVerifyDone: () => setHostKeyVerifyRequest(null),
+          hostKeyVerifyRequest: activeHostKeyRequest,
+          onHostKeyVerifyDone: removeSecurityPrompt,
           modalChildWindowCount,
           locked: isLocked,
           hasMasterPassword: !!appSettings.security.master_password,

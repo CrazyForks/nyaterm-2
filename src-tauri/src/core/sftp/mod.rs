@@ -2428,6 +2428,8 @@ mod tests {
             backspace_mode: "auto".to_string(),
             x11_forwarding: false,
             x11_display: String::new(),
+            agent_endpoint: crate::config::SshAgentEndpoint::Auto,
+            agent_forwarding: false,
             proxy: None,
             proxy_jump: None,
             post_login: None,

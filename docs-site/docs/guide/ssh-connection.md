@@ -34,11 +34,12 @@ SSH 仍然是 NyaTerm 最完整的一类会话。除了基础登录外，SSH 连
 
 ### 认证方式
 
-NyaTerm 支持三种 SSH 认证方式：
+NyaTerm 支持四种 SSH 认证方式：
 
 - **密码**
 - **私钥**
 - **无认证（none）**
+- **SSH Agent**
 
 你可以直接选择已经保存的密码或私钥，而不必每次重复填写。
 
@@ -61,6 +62,14 @@ NyaTerm 支持三种 SSH 认证方式：
 - 需要配合跳板机或自动化流程的场景
 
 私钥和密码都可以在 **Security/Auth** 面板中统一管理。
+
+#### SSH Agent 认证
+
+SSH Agent 模式只使用本机 Agent 提供的签名能力，私钥和硬件密钥不会导入 NyaTerm。高级配置中的 endpoint 会根据当前设备筛选：macOS/Linux 提供自动发现、环境变量和 Unix 域套接字，Windows 提供自动发现、Pageant 和 Windows OpenSSH Agent。`Auto` 会使用当前平台的默认 Agent。Agent 不可用或没有匹配身份时，连接会失败并显示原因。
+
+Agent endpoint 和 forwarding 开关属于设备本地连接配置。跨设备同步时不会覆盖目标设备的这些值，因此 macOS 的 Unix socket 配置不会被同步到 Windows。
+
+当 Agent 正在等待硬件触摸、PIN 或桌面确认时，NyaTerm 会显示确认弹窗。Agent 超时或认证失败后可以选择“重试”；重试会丢弃当前连接并重新建立完整的 SSH/跳板机链路。选择“取消”会终止本次连接。
 
 ### 交互式认证请求
 
@@ -94,6 +103,14 @@ SSH 表单的高级区域可以把连接从“能连上”扩展成“适合日�
 - 主机
 - 端口
 - 用户名 / 密码
+
+### SSH Agent 转发
+
+在高级配置的 **SSH Agent** 页签中可以单独启用 Agent 转发。未勾选时，NyaTerm 不会因为转发而建立本地 Agent 连接，也不会向服务器发送转发请求；如果认证方式本身选择了 SSH Agent，认证仍会使用 Agent。勾选后仅交互式终端会请求转发，SFTP、隧道和跳板机连接不会隐式开启本地 Agent 转发。
+
+:::warning
+Agent 转发会让远端进程能够通过 SSH 使用本机 Agent 的签名能力。仅对可信服务器启用，并在不需要时保持关闭。Agent endpoint 和 forwarding 开关属于设备本地连接配置，不会把硬件密钥或私钥同步到云端。
+:::
 
 ### 跳板机
 

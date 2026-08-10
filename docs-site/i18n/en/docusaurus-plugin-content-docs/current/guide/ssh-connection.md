@@ -34,11 +34,12 @@ In the **New Session** window, switch to the **SSH** tab and fill in these field
 
 ### Authentication methods
 
-NyaTerm supports three SSH authentication methods:
+NyaTerm supports four SSH authentication methods:
 
 - **Password**
 - **Private key**
 - **No authentication (none)**
+- **SSH Agent**
 
 You can select saved passwords or saved keys instead of re-entering them every time.
 
@@ -61,6 +62,14 @@ Useful for:
 - Workflows that involve jump hosts or automation
 
 Both passwords and keys can be managed centrally in **Security/Auth**.
+
+#### SSH Agent authentication
+
+SSH Agent mode only uses signing provided by the local Agent; private keys and hardware-key material are never imported into NyaTerm. Endpoint options are filtered for the current device: macOS/Linux provide automatic discovery, an environment variable, and a Unix domain socket, while Windows provides automatic discovery, Pageant, and the Windows OpenSSH Agent. `Auto` uses the platform default Agent. Connections fail with a clear error when the Agent is unavailable or has no usable identity.
+
+The Agent endpoint and forwarding switch are device-local connection settings. Cross-device sync does not overwrite these values on the destination device, so a macOS Unix socket path is never applied to Windows.
+
+When the Agent is waiting for a hardware touch, PIN, or desktop approval, NyaTerm shows a confirmation dialog. If the Agent times out or authentication fails, **Retry** discards the current attempt and rebuilds the complete SSH/jump-host chain. **Cancel** terminates the connection attempt.
 
 ### Interactive authentication requests
 
@@ -94,6 +103,14 @@ A proxy record can store:
 - Host
 - Port
 - Username / password
+
+### SSH Agent forwarding
+
+The **SSH Agent** tab in advanced configuration controls forwarding independently. When it is disabled, NyaTerm does not create a local Agent connection for forwarding and does not send an agent-forwarding request to the server. An SSH Agent authentication connection, when selected as the authentication method, still uses the Agent for authentication. When forwarding is enabled, only interactive terminal sessions request it; SFTP, tunnels, and jump-host transport connections do not implicitly enable local Agent forwarding.
+
+:::warning
+Agent forwarding allows remote processes to use the local Agent's signing capability through SSH. Enable it only for trusted servers and keep it disabled when it is not needed. The Agent endpoint and forwarding switch are device-local connection settings; hardware keys and private keys are never synchronized to the cloud.
+:::
 
 ### Jump host
 
@@ -262,6 +279,7 @@ Supported SSH authentication forms:
 - Direct password: `"auth": { "mode": "password", "password": "replace-me" }`
 - Saved password: `"auth": { "mode": "password", "password_ref": "prod-root-password" }`
 - Saved key: `"auth": { "mode": "key", "key_ref": "ops-ed25519" }`
+- SSH Agent: `"auth": { "mode": "agent" }`
 - No authentication: `"auth": { "mode": "none" }`
 
 Use either `password` or `password_ref`, but not both. `key` mode must provide `key_ref`. A `ref` is only valid inside the current JSON file; after import, NyaTerm generates real local IDs.

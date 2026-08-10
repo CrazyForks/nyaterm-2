@@ -613,6 +613,17 @@
     "shellPowerShell": "PowerShell",
     "shellWindowsTerminal": "Windows Terminal",
     "shellWsl": "WSL",
+    "sshAgent": "SSH Agent",
+    "sshAgentAuthDesc": "使用本機 SSH Agent 管理的身分進行驗證。",
+    "sshAgentAuto": "自動選擇",
+    "sshAgentEndpoint": "Agent 端點",
+    "sshAgentEnvironment": "環境變數",
+    "sshAgentForwarding": "允許 Agent 轉送",
+    "sshAgentForwardingDesc": "將本機 Agent 轉送到遠端伺服器。",
+    "sshAgentForwardingWarning": "Agent 轉送會讓遠端程序透過 SSH 使用本機 Agent 的簽章能力。僅對可信任的伺服器啟用，不需要時請保持關閉。Agent endpoint 與轉送開關屬於裝置本機連線設定，硬體金鑰或私密金鑰不會同步到雲端。",
+    "sshAgentPageant": "Pageant",
+    "sshAgentUnixSocket": "Unix 網域通訊端",
+    "sshAgentWindowsOpenSsh": "Windows OpenSSH Agent",
     "sshAlgorithms": "SSH 演算法",
     "sshAlgorithmsDesc": "控制此 SSH 連線的傳輸協商順序。",
     "sshBackspaceModeDesc": "控制 SSH 退格鍵傳送的位元組。網路等裝置不相容預設 DEL 時，可切換為 Ctrl+H。",
@@ -2351,6 +2362,20 @@
     "x11Display": "本機 X11 DISPLAY",
     "x11DisplayDesc": "需要本機已安裝並啟動 X server。Windows 可使用 VcXsrv/Xming，macOS 可使用 XQuartz，Linux 通常使用 Xorg/Xwayland。",
     "x11DisplayPlaceholder": "Windows: localhost:0 / Linux/macOS: :0"
+  },
+  "sshAgentAuth": {
+    "endpoint": {
+      "auto": "系統預設 Agent",
+      "environment": "環境變數 Agent",
+      "pageant": "Pageant",
+      "unix_socket": "Unix Socket Agent",
+      "windows_open_ssh": "Windows OpenSSH Agent"
+    },
+    "failedDescription": "SSH Agent 要求失敗。",
+    "failedTitle": "SSH Agent 驗證失敗",
+    "responseError": "SSH Agent 要求已不可用。",
+    "waitingDescription": "請確認硬體金鑰、輸入 PIN，或在 SSH Agent 中核准要求。",
+    "waitingTitle": "SSH Agent 需要確認"
   },
   "sshAuth": {
     "addKey": "新增 SSH 金鑰",

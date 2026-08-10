@@ -132,6 +132,8 @@ export interface SshConfig {
   backspace_mode?: string;
   x11_forwarding?: boolean;
   x11_display?: string;
+  agent_endpoint?: SshAgentEndpoint;
+  agent_forwarding?: boolean;
   proxy?: ProxySettings | null;
   proxy_jump?: SshConfig | null;
   post_login?: { command: string; delay_ms: number } | null;
@@ -140,10 +142,18 @@ export interface SshConfig {
   encoding?: string;
 }
 
-/** SSH authentication: none, password, or private key (PEM content). */
+/** SSH authentication: none, password, private key (PEM content), or SSH Agent. */
+export type SshAgentEndpoint =
+  | { type: "auto" }
+  | { type: "environment"; variable: string }
+  | { type: "unix_socket"; path: string }
+  | { type: "pageant" }
+  | { type: "windows_open_ssh" };
+
 export type SshAuth =
   | { type: "none" }
   | { type: "password"; password?: string | null }
+  | { type: "agent" }
   | {
       type: "key";
       key_data: string;
@@ -388,6 +398,10 @@ export interface SavedConnection {
   auto_login?: TelnetAutoLoginConfig;
   /** SSH-only: enables X11 forwarding for remote graphical applications. */
   x11_forwarding?: boolean;
+  /** SSH-only: local Agent endpoint used for authentication and forwarding. */
+  agent_endpoint?: SshAgentEndpoint;
+  /** SSH-only: request server-side SSH Agent forwarding for the interactive shell. */
+  agent_forwarding?: boolean;
   /** Per-connection encoding override. Empty string means follow global setting. */
   encoding?: string;
   /** RDP-only: optional Windows/domain part for authentication. */

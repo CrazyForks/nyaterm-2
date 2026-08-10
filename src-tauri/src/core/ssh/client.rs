@@ -1,4 +1,5 @@
-use crate::config::{SftpSettings, SshAlgorithmMode, SshAlgorithmPreferences};
+use super::agent::connect_agent_stream;
+use crate::config::{SftpSettings, SshAgentEndpoint, SshAlgorithmMode, SshAlgorithmPreferences};
 use crate::error::{AppError, AppResult};
 use russh::client;
 use russh::keys::{Algorithm, EcdsaCurve, HashAlg, PublicKeyBase64};
@@ -32,6 +33,10 @@ pub struct SshConfig {
     pub x11_forwarding: bool,
     #[serde(default)]
     pub x11_display: String,
+    #[serde(default)]
+    pub agent_endpoint: SshAgentEndpoint,
+    #[serde(default)]
+    pub agent_forwarding: bool,
     #[serde(default)]
     pub proxy: Option<crate::config::ProxySettings>,
     #[serde(default)]
@@ -96,7 +101,7 @@ pub struct SshStartupCommand {
     pub delay_ms: u64,
 }
 
-/// Authentication method: none, password, or key (with optional passphrase).
+/// Authentication method: none, password, private key, or SSH Agent.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum SshAuth {
@@ -104,6 +109,8 @@ pub enum SshAuth {
     None,
     #[serde(rename = "password")]
     Password { password: Option<String> },
+    #[serde(rename = "agent")]
+    Agent,
     #[serde(rename = "key")]
     Key {
         #[serde(default)]
@@ -237,6 +244,7 @@ pub struct SshHandler {
     x11_tx: Option<mpsc::UnboundedSender<super::x11_forwarding::X11ChannelOpen>>,
     disconnect_tx: Option<mpsc::UnboundedSender<String>>,
     remote_forward_tx: Option<mpsc::UnboundedSender<RemoteForwardOpen>>,
+    agent_forwarding_endpoint: Option<SshAgentEndpoint>,
 }
 
 impl SshHandler {
@@ -254,6 +262,7 @@ impl SshHandler {
             x11_tx: None,
             disconnect_tx: None,
             remote_forward_tx: None,
+            agent_forwarding_endpoint: None,
         }
     }
 
@@ -275,6 +284,12 @@ impl SshHandler {
         remote_forward_tx: mpsc::UnboundedSender<RemoteForwardOpen>,
     ) -> Self {
         self.remote_forward_tx = Some(remote_forward_tx);
+        self
+    }
+
+    /// Configure the local endpoint used by remote Agent forwarding.
+    pub fn with_agent_forwarding_endpoint(mut self, endpoint: SshAgentEndpoint) -> Self {
+        self.agent_forwarding_endpoint = Some(endpoint);
         self
     }
 
@@ -740,6 +755,10 @@ impl client::Handler for SshHandler {
                             false
                         }
                     };
+                let _ = self.app.emit(
+                    "host-key-verify-resolved",
+                    serde_json::json!({ "requestId": request_id }),
+                );
 
                 if accepted {
                     tracing::info!(
@@ -885,6 +904,40 @@ impl client::Handler for SshHandler {
                 .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
                 .await;
         }
+        Ok(())
+    }
+
+    async fn server_channel_open_agent_forward(
+        &mut self,
+        channel: russh::Channel<client::Msg>,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let Some(endpoint) = self.agent_forwarding_endpoint.clone() else {
+            reply
+                .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
+            return Ok(());
+        };
+
+        // The handler callback must not block on Agent I/O because that would
+        // stall the SSH event loop. Acceptance/rejection and bidirectional
+        // forwarding are performed in a separate task.
+        tokio::spawn(async move {
+            let Ok(mut agent_stream) = connect_agent_stream(&endpoint).await else {
+                reply.reject(russh::ChannelOpenFailure::ConnectFailed).await;
+                let _ = channel.close().await;
+                return;
+            };
+
+            reply.accept().await;
+            let mut channel_stream = channel.into_stream();
+            if let Err(error) =
+                tokio::io::copy_bidirectional(&mut agent_stream, &mut channel_stream).await
+            {
+                tracing::debug!(%error, "SSH Agent forwarding channel closed");
+            }
+        });
         Ok(())
     }
 }

@@ -46,6 +46,7 @@ import type {
   RecordingMode,
   SavedConnection,
   SftpSettings,
+  SshAgentEndpoint,
   SshAlgorithmPreferences,
 } from "@/types/global";
 
@@ -169,6 +170,8 @@ export default function NewSessionPage() {
   const [postLoginDelayMs, setPostLoginDelayMs] = useState(DEFAULT_POST_LOGIN_DELAY_MS);
   const [sshBackspaceMode, setSshBackspaceMode] = useState("del");
   const [x11Forwarding, setX11Forwarding] = useState(false);
+  const [agentEndpoint, setAgentEndpoint] = useState<SshAgentEndpoint>({ type: "auto" });
+  const [agentForwarding, setAgentForwarding] = useState(false);
   const [sshAlgorithms, setSshAlgorithms] =
     useState<SshAlgorithmPreferences>(DEFAULT_SSH_ALGORITHMS);
   const [sftpSettings, setSftpSettings] = useState<SftpSettings>(DEFAULT_SFTP_SETTINGS);
@@ -263,6 +266,8 @@ export default function NewSessionPage() {
           setPostLoginDelayMs(found.post_login?.delay_ms ?? DEFAULT_POST_LOGIN_DELAY_MS);
           setSshBackspaceMode(found.backspace_mode || "del");
           setX11Forwarding(found.x11_forwarding ?? false);
+          setAgentEndpoint(found.agent_endpoint ?? { type: "auto" });
+          setAgentForwarding(found.agent_forwarding ?? false);
           setSshAlgorithms(normalizeSshAlgorithms(found.ssh_algorithms));
           setSftpSettings(normalizeSftpSettings(found.sftp));
         } else if (found.type === "telnet") {
@@ -691,7 +696,9 @@ export default function NewSessionPage() {
                     ? "password"
                     : authType === "key" && keyId
                       ? "key"
-                      : "none";
+                      : authType === "agent"
+                        ? "agent"
+                        : "none";
               const nextAuth: NonNullable<SavedConnection["auth"]> = {
                 mode: resolvedAuthMode,
                 password_id: resolvedAuthMode === "password" ? passwordId || "" : "",
@@ -775,6 +782,8 @@ export default function NewSessionPage() {
               sftp: sftpSettings,
               backspace_mode: sshBackspaceMode,
               x11_forwarding: x11Forwarding,
+              agent_endpoint: agentEndpoint,
+              agent_forwarding: agentForwarding,
             }
           : {}),
         ...(currentTab === "telnet"
@@ -1187,6 +1196,10 @@ export default function NewSessionPage() {
               setBackspaceMode={setSshBackspaceMode}
               x11Forwarding={x11Forwarding}
               setX11Forwarding={setX11Forwarding}
+              agentEndpoint={agentEndpoint}
+              setAgentEndpoint={setAgentEndpoint}
+              agentForwarding={agentForwarding}
+              setAgentForwarding={setAgentForwarding}
               sshAlgorithms={sshAlgorithms}
               setSshAlgorithms={setSshAlgorithms}
               sftpSettings={sftpSettings}

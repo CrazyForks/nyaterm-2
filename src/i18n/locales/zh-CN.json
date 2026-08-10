@@ -613,6 +613,17 @@
     "shellPowerShell": "PowerShell",
     "shellWindowsTerminal": "Windows Terminal",
     "shellWsl": "WSL",
+    "sshAgent": "SSH Agent",
+    "sshAgentAuthDesc": "使用本机 SSH Agent 管理的身份进行认证。",
+    "sshAgentAuto": "自动选择",
+    "sshAgentEndpoint": "Agent 端点",
+    "sshAgentEnvironment": "环境变量",
+    "sshAgentForwarding": "允许 Agent 转发",
+    "sshAgentForwardingDesc": "将本机 Agent 转发到远程服务器。",
+    "sshAgentForwardingWarning": "Agent 转发会让远端进程能够通过 SSH 使用本机 Agent 的签名能力。仅对可信服务器启用，并在不需要时保持关闭。Agent endpoint 和 forwarding 开关属于设备本地连接配置，不会把硬件密钥或私钥同步到云端。",
+    "sshAgentPageant": "Pageant",
+    "sshAgentUnixSocket": "Unix 域套接字",
+    "sshAgentWindowsOpenSsh": "Windows OpenSSH Agent",
     "sshAlgorithms": "SSH 算法",
     "sshAlgorithmsDesc": "控制此 SSH 连接的传输协商顺序。",
     "sshBackspaceModeDesc": "控制 SSH 退格键发送的字节。网络等设备不兼容默认 DEL 时，可切换为 Ctrl+H。",
@@ -2356,6 +2367,20 @@
     "x11Display": "本地 X11 DISPLAY",
     "x11DisplayDesc": "需要本机已安装并启动 X server。Windows 可使用 VcXsrv/Xming，macOS 可使用 XQuartz，Linux 通常使用 Xorg/Xwayland。",
     "x11DisplayPlaceholder": "Windows: localhost:0 / Linux/macOS: :0"
+  },
+  "sshAgentAuth": {
+    "endpoint": {
+      "auto": "系统默认 Agent",
+      "environment": "环境变量 Agent",
+      "pageant": "Pageant",
+      "unix_socket": "Unix Socket Agent",
+      "windows_open_ssh": "Windows OpenSSH Agent"
+    },
+    "failedDescription": "SSH Agent 请求失败。",
+    "failedTitle": "SSH Agent 认证失败",
+    "responseError": "SSH Agent 请求已不可用。",
+    "waitingDescription": "请确认硬件密钥、输入 PIN，或在 SSH Agent 中批准请求。",
+    "waitingTitle": "SSH Agent 需要确认"
   },
   "sshAuth": {
     "addKey": "添加 SSH 密钥",
