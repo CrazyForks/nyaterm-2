@@ -9,6 +9,7 @@ import AppPanelContent from "./components/app/AppPanelContent";
 import ExternalConnectionMatchDialog from "./components/dialog/connections/ExternalConnectionMatchDialog";
 import type { HostKeyVerifyRequest } from "./components/dialog/connections/HostKeyVerifyDialog";
 import type { OtpRequest } from "./components/dialog/connections/OtpDialog";
+import type { RdpCertificateVerifyRequest } from "./components/dialog/connections/RdpCertificateVerifyDialog";
 import type { SshAuthRequest } from "./components/dialog/connections/SshAuthDialog";
 import TemporarySshLinkDialog from "./components/dialog/connections/TemporarySshLinkDialog";
 import type { DockerSudoPasswordRequest } from "./components/dialog/docker/DockerSudoPasswordDialog";
@@ -151,6 +152,15 @@ function getConnectionSessionType(
   connection: Pick<SavedConnection, "type"> | null | undefined,
 ): WorkspaceSessionType {
   return connection ? CONNECTION_SESSION_TYPES[connection.type] : "SSH";
+}
+
+function getRdpPaneDisplay(connection: SavedConnection | null | undefined) {
+  if (connection?.type !== "rdp") return undefined;
+  return {
+    remoteWidth: connection.display?.width ?? 1920,
+    remoteHeight: connection.display?.height ?? 1080,
+    scaleMode: connection.display?.mode === "fit-window" ? "fit" : "actual",
+  } as const;
 }
 
 function isSessionCreationCancelled(error: unknown) {
@@ -519,6 +529,9 @@ function App() {
   const [hostKeyVerifyRequest, setHostKeyVerifyRequest] = useState<HostKeyVerifyRequest | null>(
     null,
   );
+  const [rdpCertificateRequests, setRdpCertificateRequests] = useState<
+    RdpCertificateVerifyRequest[]
+  >([]);
   const lastCloudConflictRevisionRef = useRef<string | null>(null);
   const modalChildWindowCount = useModalChildWindows();
 
@@ -634,6 +647,16 @@ function App() {
     );
 
     unsubs.push(
+      listen<RdpCertificateVerifyRequest>("rdp-certificate-verify", (event) => {
+        if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
+        setRdpCertificateRequests((current) => {
+          if (current.some((item) => item.requestId === event.payload.requestId)) return current;
+          return [...current, event.payload];
+        });
+      }),
+    );
+
+    unsubs.push(
       listen<{
         requestId: string;
         sessionId: string;
@@ -698,6 +721,7 @@ function App() {
               name: connName,
               type: sessionType,
               connectionId,
+              display: getRdpPaneDisplay(conn),
             });
           } else {
             const pending = addPendingTab(
@@ -706,6 +730,7 @@ function App() {
               connectionId,
               undefined,
               anchorTabId ? { afterTabId: anchorTabId } : undefined,
+              { display: getRdpPaneDisplay(conn) },
             );
             tabId = pending.tabId;
             createRequestId = pending.createRequestId;
@@ -738,6 +763,12 @@ function App() {
                 break;
               case "serial":
                 sessionId = await invoke<string>("create_serial_session", {
+                  connectionId,
+                  createRequestId,
+                });
+                break;
+              case "rdp":
+                sessionId = await invoke<string>("create_rdp_session", {
                   connectionId,
                   createRequestId,
                 });
@@ -989,6 +1020,9 @@ function App() {
         connection.name,
         getConnectionSessionType(connection),
         connection.id,
+        undefined,
+        undefined,
+        { display: getRdpPaneDisplay(connection) },
       );
       const { tabId, createRequestId } = pending;
 
@@ -3425,6 +3459,11 @@ function App() {
             ),
           hostKeyVerifyRequest,
           onHostKeyVerifyDone: () => setHostKeyVerifyRequest(null),
+          rdpCertificateVerifyRequest: rdpCertificateRequests[0] ?? null,
+          onRdpCertificateVerifyDone: (requestId) =>
+            setRdpCertificateRequests((current) =>
+              current.filter((item) => item.requestId !== requestId),
+            ),
           modalChildWindowCount,
           locked: isLocked,
           hasMasterPassword: !!appSettings.security.master_password,

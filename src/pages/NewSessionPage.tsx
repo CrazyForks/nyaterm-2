@@ -43,6 +43,7 @@ import type {
   ProxyConfig,
   RdpCertificatePolicy,
   RdpClipboardMode,
+  RdpDisplayMode,
   RecordingMode,
   SavedConnection,
   SftpSettings,
@@ -147,6 +148,7 @@ export default function NewSessionPage() {
   const [currentTab, setCurrentTab] = useState("ssh");
   const [rdpUseNla, setRdpUseNla] = useState(true);
   const [rdpCertificatePolicy, setRdpCertificatePolicy] = useState<RdpCertificatePolicy>("prompt");
+  const [rdpDisplayMode, setRdpDisplayMode] = useState<RdpDisplayMode>("fit-window");
   const [rdpDisplayWidth, setRdpDisplayWidth] = useState(1920);
   const [rdpDisplayHeight, setRdpDisplayHeight] = useState(1080);
   const [rdpClipboardMode, setRdpClipboardMode] = useState<RdpClipboardMode>("text-only");
@@ -300,6 +302,9 @@ export default function NewSessionPage() {
           setHasPassword(found.auth?.has_password || false);
           setRdpUseNla(found.security?.use_nla ?? true);
           setRdpCertificatePolicy(found.security?.certificate_policy ?? "prompt");
+          setRdpDisplayMode(
+            found.display?.mode === "native" ? "fixed" : (found.display?.mode ?? "fit-window"),
+          );
           setRdpDisplayWidth(found.display?.width ?? 1920);
           setRdpDisplayHeight(found.display?.height ?? 1080);
           setRdpClipboardMode(found.clipboard?.mode ?? "text-only");
@@ -383,6 +388,7 @@ export default function NewSessionPage() {
     setTelnetSendSga(true);
     setRdpUseNla(true);
     setRdpCertificatePolicy("prompt");
+    setRdpDisplayMode("fit-window");
     setRdpDisplayWidth(1920);
     setRdpDisplayHeight(1080);
     setRdpClipboardMode("text-only");
@@ -822,7 +828,7 @@ export default function NewSessionPage() {
                 certificate_policy: rdpCertificatePolicy,
               },
               display: {
-                mode: "fit-window",
+                mode: rdpDisplayMode,
                 width: rdpDisplayWidth,
                 height: rdpDisplayHeight,
                 color_depth: 32,
@@ -1303,6 +1309,8 @@ export default function NewSessionPage() {
               setDisplayWidth={setRdpDisplayWidth}
               displayHeight={rdpDisplayHeight}
               setDisplayHeight={setRdpDisplayHeight}
+              displayMode={rdpDisplayMode}
+              setDisplayMode={setRdpDisplayMode}
               clipboardMode={rdpClipboardMode}
               setClipboardMode={setRdpClipboardMode}
               reconnectEnabled={rdpReconnectEnabled}

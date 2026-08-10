@@ -10,6 +10,8 @@ import type { HostKeyVerifyRequest } from "@/components/dialog/connections/HostK
 import { HostKeyVerifyDialog } from "@/components/dialog/connections/HostKeyVerifyDialog";
 import type { OtpRequest } from "@/components/dialog/connections/OtpDialog";
 import { OtpDialog } from "@/components/dialog/connections/OtpDialog";
+import type { RdpCertificateVerifyRequest } from "@/components/dialog/connections/RdpCertificateVerifyDialog";
+import { RdpCertificateVerifyDialog } from "@/components/dialog/connections/RdpCertificateVerifyDialog";
 import type { SshAuthRequest } from "@/components/dialog/connections/SshAuthDialog";
 import { SshAuthDialog } from "@/components/dialog/connections/SshAuthDialog";
 import DockerSudoPasswordDialog, {
@@ -127,6 +129,8 @@ interface AppLayoutProps {
     onDockerSudoPasswordDone: (requestId: string) => void;
     hostKeyVerifyRequest: HostKeyVerifyRequest | null;
     onHostKeyVerifyDone: () => void;
+    rdpCertificateVerifyRequest: RdpCertificateVerifyRequest | null;
+    onRdpCertificateVerifyDone: (requestId: string) => void;
     modalChildWindowCount: number;
     locked: boolean;
     hasMasterPassword: boolean;
@@ -518,6 +522,10 @@ export default function AppLayout({
         <HostKeyVerifyDialog
           request={dialogs.hostKeyVerifyRequest}
           onDone={dialogs.onHostKeyVerifyDone}
+        />
+        <RdpCertificateVerifyDialog
+          request={dialogs.rdpCertificateVerifyRequest}
+          onDone={dialogs.onRdpCertificateVerifyDone}
         />
         <TransferDuplicateDialog />
 

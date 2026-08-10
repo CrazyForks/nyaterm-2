@@ -13,8 +13,15 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { invoke } from "@/lib/invoke";
+import {
+  buildRdpUnicodeInput,
+  rdpBeforeInputText,
+  rdpCompositionCommitText,
+  shouldUsePhysicalRdpKey,
+} from "@/lib/rdpIme";
 import { decodeRdpFramePatch, type RdpFramePatch } from "@/lib/rdpFrame";
 import { buildRdpKeyEvent, type RdpInputEvent } from "@/lib/rdpInput";
+import { decideFitWindowResize, keepDesktopSizeIfUnchanged } from "@/lib/rdpResize";
 import { mapClientPointToRdpPixel } from "@/lib/rdpViewport";
 import type { RdpSessionPane } from "@/types/global";
 
@@ -32,6 +39,29 @@ interface RdpStatePayload {
   sessionId: string;
   state: RdpSessionState;
   message?: string | null;
+  errorKind?: string | null;
+}
+
+type RdpPointerPayload =
+  | { type: "default"; sessionId: string }
+  | { type: "hidden"; sessionId: string }
+  | { type: "position"; sessionId: string; x: number; y: number }
+  | {
+      type: "bitmap";
+      sessionId: string;
+      width: number;
+      height: number;
+      hotspotX: number;
+      hotspotY: number;
+      rgbaBase64: string;
+    };
+
+interface RemoteCursorBitmap {
+  src: string;
+  width: number;
+  height: number;
+  hotspotX: number;
+  hotspotY: number;
 }
 
 interface RdpPaneHostProps {
@@ -78,6 +108,21 @@ function copyPatchToRgba(patch: RdpFramePatch, target: Uint8ClampedArray | Uint8
       target[dst + 3] = patch.payload[src + 3] ?? 255;
     }
   }
+}
+
+function rgbaBase64ToDataUrl(base64: string, width: number, height: number) {
+  const binary = atob(base64);
+  const bytes = new Uint8ClampedArray(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
+  return canvas.toDataURL("image/png");
 }
 
 interface RdpCanvasRenderer {
@@ -301,10 +346,18 @@ function RdpPaneHost({
   onConnectionError,
 }: RdpPaneHostProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const imeRef = useRef<HTMLTextAreaElement | null>(null);
+  const cursorRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<RdpCanvasRenderer | null>(null);
   const pressedKeysRef = useRef(new Set<string>());
+  const composingRef = useRef(false);
   const pendingMouseMoveRef = useRef<{ x: number; y: number } | null>(null);
   const mouseRafRef = useRef<number | null>(null);
+  const cursorRafRef = useRef<number | null>(null);
+  const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const remoteCursorBitmapRef = useRef<RemoteCursorBitmap | null>(null);
+  const lastResizeRef = useRef<{ width: number; height: number } | null>(null);
   const [state, setState] = useState<RdpSessionState>(pane.connectError ? "failed" : "connecting");
   const [message, setMessage] = useState<string | null>(pane.connectError ?? null);
   const [desktopSize, setDesktopSize] = useState({
@@ -329,7 +382,12 @@ function RdpPaneHost({
   useEffect(() => {
     const channel = new Channel<ArrayBuffer>((frame) => {
       const patch = decodeRdpFramePatch(frame);
-      setDesktopSize({ width: patch.desktopWidth, height: patch.desktopHeight });
+      setDesktopSize((current) =>
+        keepDesktopSizeIfUnchanged(current, {
+          width: patch.desktopWidth,
+          height: patch.desktopHeight,
+        }),
+      );
       const canvas = canvasRef.current;
       if (!canvas) return;
       rendererRef.current ??= createRdpRenderer(canvas);
@@ -364,9 +422,125 @@ function RdpPaneHost({
     };
   }, [onConnectionError, pane.sessionId]);
 
+  const applyCursorPosition = useCallback(() => {
+    cursorRafRef.current = null;
+    const cursor = cursorRef.current;
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    const position = pendingCursorRef.current;
+    const bitmap = remoteCursorBitmapRef.current;
+    if (!cursor || !canvas || !container || !position || !bitmap) return;
+    const rect = canvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const scaleX = rect.width / Math.max(1, canvas.width);
+    const scaleY = rect.height / Math.max(1, canvas.height);
+    const x = rect.left - containerRect.left + position.x * scaleX - bitmap.hotspotX * scaleX;
+    const y = rect.top - containerRect.top + position.y * scaleY - bitmap.hotspotY * scaleY;
+    cursor.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen<RdpPointerPayload>(`rdp-pointer-${pane.sessionId}`, (event) => {
+      const canvas = canvasRef.current;
+      const cursor = cursorRef.current;
+      if (!canvas || !cursor) return;
+
+      if (event.payload.type === "default") {
+        remoteCursorBitmapRef.current = null;
+        cursor.replaceChildren();
+        cursor.style.display = "none";
+        canvas.style.cursor = "";
+        return;
+      }
+
+      canvas.style.cursor = "none";
+      if (event.payload.type === "hidden") {
+        cursor.style.display = "none";
+        return;
+      }
+
+      if (event.payload.type === "bitmap") {
+        const bitmap = {
+          src: rgbaBase64ToDataUrl(
+            event.payload.rgbaBase64,
+            event.payload.width,
+            event.payload.height,
+          ),
+          width: event.payload.width,
+          height: event.payload.height,
+          hotspotX: event.payload.hotspotX,
+          hotspotY: event.payload.hotspotY,
+        };
+        remoteCursorBitmapRef.current = bitmap;
+        const img = document.createElement("img");
+        img.src = bitmap.src;
+        img.width = bitmap.width;
+        img.height = bitmap.height;
+        img.draggable = false;
+        cursor.replaceChildren(img);
+        cursor.style.display = "block";
+        return;
+      }
+
+      pendingCursorRef.current = { x: event.payload.x, y: event.payload.y };
+      cursor.style.display = remoteCursorBitmapRef.current ? "block" : "none";
+      if (cursorRafRef.current === null) {
+        cursorRafRef.current = requestAnimationFrame(applyCursorPosition);
+      }
+    });
+    return () => {
+      void unlisten.then((dispose) => dispose());
+      if (cursorRafRef.current !== null) cancelAnimationFrame(cursorRafRef.current);
+      cursorRafRef.current = null;
+    };
+  }, [applyCursorPosition, pane.sessionId]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (pane.display?.scaleMode !== "fit") return;
+
+    let timer: number | null = null;
+    const syncResize = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const rect = container.getBoundingClientRect();
+        const decision = decideFitWindowResize({
+          mode: "fit-window",
+          visible: active && visible && state === "active" && rect.width > 0 && rect.height > 0,
+          containerWidth: rect.width,
+          containerHeight: rect.height,
+          lastWidth: lastResizeRef.current?.width,
+          lastHeight: lastResizeRef.current?.height,
+        });
+        if (!decision.shouldResize) return;
+        lastResizeRef.current = { width: decision.width, height: decision.height };
+        void invoke("rdp_resize", {
+          sessionId: pane.sessionId,
+          width: decision.width,
+          height: decision.height,
+        }).catch(() => {});
+      }, 200);
+    };
+
+    const observer = new ResizeObserver(syncResize);
+    observer.observe(container);
+    syncResize();
+    return () => {
+      observer.disconnect();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [active, pane.display?.scaleMode, pane.sessionId, state, visible]);
+
   useEffect(() => {
     if (!active || !visible) releaseAllKeys();
   }, [active, releaseAllKeys, visible]);
+
+  useEffect(() => {
+    if (active && visible) {
+      imeRef.current?.focus({ preventScroll: true });
+    }
+  }, [active, visible]);
 
   useEffect(() => {
     window.addEventListener("blur", releaseAllKeys);
@@ -377,7 +551,8 @@ function RdpPaneHost({
   }, [releaseAllKeys]);
 
   const handleKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
       const inputEvent = buildRdpKeyEvent(event.nativeEvent, "key-down");
       if (!inputEvent) return;
       event.preventDefault();
@@ -389,7 +564,8 @@ function RdpPaneHost({
   );
 
   const handleKeyUp = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
       const inputEvent = buildRdpKeyEvent(event.nativeEvent, "key-up");
       if (!inputEvent) return;
       event.preventDefault();
@@ -434,12 +610,45 @@ function RdpPaneHost({
 
   return (
     <div
+      ref={containerRef}
       className="group relative flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden bg-black outline-none"
       tabIndex={active ? 0 : -1}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
       onBlur={releaseAllKeys}
+      onPointerDown={() => imeRef.current?.focus({ preventScroll: true })}
     >
+      <textarea
+        ref={imeRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute h-px w-px resize-none opacity-0"
+        tabIndex={active ? 0 : -1}
+        defaultValue=""
+        onCompositionStart={() => {
+          composingRef.current = true;
+        }}
+        onCompositionEnd={(event) => {
+          composingRef.current = false;
+          const text = rdpCompositionCommitText(event.data || event.currentTarget.value);
+          event.currentTarget.value = "";
+          if (text) void sendInputBatch(buildRdpUnicodeInput(text));
+        }}
+        onBeforeInput={(event) => {
+          const text = rdpBeforeInputText(event.nativeEvent as InputEvent);
+          if (!text || composingRef.current) return;
+          event.preventDefault();
+          event.currentTarget.value = "";
+          void sendInputBatch(buildRdpUnicodeInput(text));
+        }}
+        onKeyDown={(event) => {
+          if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
+          handleKeyDown(event);
+        }}
+        onKeyUp={(event) => {
+          if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
+          handleKeyUp(event);
+        }}
+      />
       <canvas
         ref={canvasRef}
         className="block object-contain"
@@ -471,6 +680,12 @@ function RdpPaneHost({
             { type: "mouse-wheel", deltaX: event.deltaX, deltaY: event.deltaY, ...point },
           ]);
         }}
+      />
+
+      <div
+        ref={cursorRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 top-0 z-10 hidden"
       />
 
       <div className="absolute left-2 top-2 flex items-center gap-1 rounded border border-white/15 bg-black/65 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">

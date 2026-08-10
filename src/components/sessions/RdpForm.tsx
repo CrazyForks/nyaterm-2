@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { invoke } from "@/lib/invoke";
-import type { RdpCertificatePolicy, RdpClipboardMode, SavedPassword } from "@/types/global";
+import type {
+  RdpCertificatePolicy,
+  RdpClipboardMode,
+  RdpDisplayMode,
+  SavedPassword,
+} from "@/types/global";
 
 interface RdpFormProps {
   host: string;
@@ -39,6 +44,8 @@ interface RdpFormProps {
   setDisplayWidth: (value: number) => void;
   displayHeight: number;
   setDisplayHeight: (value: number) => void;
+  displayMode: RdpDisplayMode;
+  setDisplayMode: (value: RdpDisplayMode) => void;
   clipboardMode: RdpClipboardMode;
   setClipboardMode: (value: RdpClipboardMode) => void;
   reconnectEnabled: boolean;
@@ -74,6 +81,8 @@ export function RdpForm({
   setDisplayWidth,
   displayHeight,
   setDisplayHeight,
+  displayMode,
+  setDisplayMode,
   clipboardMode,
   setClipboardMode,
   reconnectEnabled,
@@ -226,7 +235,24 @@ export function RdpForm({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
+        <div>
+          <Label className="text-xs font-medium text-foreground/80">
+            {t("dialog.rdpDisplayMode")}
+          </Label>
+          <Select
+            value={displayMode === "native" ? "fixed" : displayMode}
+            onValueChange={(value) => setDisplayMode(value as RdpDisplayMode)}
+          >
+            <SelectTrigger className="mt-1 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fit-window">{t("dialog.rdpDisplayFitWindow")}</SelectItem>
+              <SelectItem value="fixed">{t("dialog.rdpDisplayFixed")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div>
           <Label className="text-xs font-medium text-foreground/80">{t("dialog.rdpWidth")}</Label>
           <NumberInput
