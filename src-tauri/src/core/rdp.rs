@@ -129,12 +129,14 @@ pub enum RdpPointerEvent {
 pub enum RdpInputEvent {
     #[serde(rename = "key-down")]
     KeyDown {
+        #[serde(alias = "scanCode")]
         scan_code: u16,
         extended: bool,
         repeat: bool,
     },
     #[serde(rename = "key-up")]
     KeyUp {
+        #[serde(alias = "scanCode")]
         scan_code: u16,
         extended: bool,
         repeat: bool,
@@ -150,7 +152,9 @@ pub enum RdpInputEvent {
     },
     #[serde(rename = "mouse-wheel")]
     MouseWheel {
+        #[serde(alias = "deltaX")]
         delta_x: f64,
+        #[serde(alias = "deltaY")]
         delta_y: f64,
         x: u32,
         y: u32,
@@ -1983,6 +1987,52 @@ mod tests {
         let current = bridge.last_text_hash.lock().unwrap();
         assert_eq!(*current, Some(stable_text_hash("same")));
         assert_ne!(*current, Some(stable_text_hash("different")));
+    }
+
+    #[test]
+    fn rdp_input_event_accepts_frontend_camel_case_fields() {
+        let key_event: RdpInputEvent = serde_json::from_value(serde_json::json!({
+            "type": "key-down",
+            "scanCode": 29,
+            "extended": false,
+            "repeat": false
+        }))
+        .unwrap();
+        match key_event {
+            RdpInputEvent::KeyDown {
+                scan_code,
+                extended,
+                repeat,
+            } => {
+                assert_eq!(scan_code, 29);
+                assert!(!extended);
+                assert!(!repeat);
+            }
+            _ => panic!("expected key-down event"),
+        }
+
+        let wheel_event: RdpInputEvent = serde_json::from_value(serde_json::json!({
+            "type": "mouse-wheel",
+            "deltaX": 1.0,
+            "deltaY": -2.0,
+            "x": 10,
+            "y": 20
+        }))
+        .unwrap();
+        match wheel_event {
+            RdpInputEvent::MouseWheel {
+                delta_x,
+                delta_y,
+                x,
+                y,
+            } => {
+                assert_eq!(delta_x, 1.0);
+                assert_eq!(delta_y, -2.0);
+                assert_eq!(x, 10);
+                assert_eq!(y, 20);
+            }
+            _ => panic!("expected mouse-wheel event"),
+        }
     }
 
     #[tokio::test]

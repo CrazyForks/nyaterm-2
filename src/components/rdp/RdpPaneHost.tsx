@@ -13,13 +13,13 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { invoke } from "@/lib/invoke";
+import { decodeRdpFramePatch, type RdpFramePatch } from "@/lib/rdpFrame";
 import {
   buildRdpUnicodeInput,
   rdpBeforeInputText,
   rdpCompositionCommitText,
   shouldUsePhysicalRdpKey,
 } from "@/lib/rdpIme";
-import { decodeRdpFramePatch, type RdpFramePatch } from "@/lib/rdpFrame";
 import { buildRdpKeyEvent, type RdpInputEvent } from "@/lib/rdpInput";
 import { decideFitWindowResize, keepDesktopSizeIfUnchanged } from "@/lib/rdpResize";
 import { mapClientPointToRdpPixel } from "@/lib/rdpViewport";
@@ -358,6 +358,7 @@ function RdpPaneHost({
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
   const remoteCursorBitmapRef = useRef<RemoteCursorBitmap | null>(null);
   const lastResizeRef = useRef<{ width: number; height: number } | null>(null);
+  const didPrimeResizeRef = useRef(false);
   const [state, setState] = useState<RdpSessionState>(pane.connectError ? "failed" : "connecting");
   const [message, setMessage] = useState<string | null>(pane.connectError ?? null);
   const [desktopSize, setDesktopSize] = useState({
@@ -380,6 +381,9 @@ function RdpPaneHost({
   }, [sendInputBatch]);
 
   useEffect(() => {
+    didPrimeResizeRef.current = false;
+    lastResizeRef.current = null;
+
     const channel = new Channel<ArrayBuffer>((frame) => {
       const patch = decodeRdpFramePatch(frame);
       setDesktopSize((current) =>
@@ -453,9 +457,9 @@ function RdpPaneHost({
         return;
       }
 
-      canvas.style.cursor = "none";
       if (event.payload.type === "hidden") {
         cursor.style.display = "none";
+        canvas.style.cursor = "";
         return;
       }
 
@@ -472,6 +476,7 @@ function RdpPaneHost({
           hotspotY: event.payload.hotspotY,
         };
         remoteCursorBitmapRef.current = bitmap;
+        canvas.style.cursor = "none";
         const img = document.createElement("img");
         img.src = bitmap.src;
         img.width = bitmap.width;
@@ -483,7 +488,9 @@ function RdpPaneHost({
       }
 
       pendingCursorRef.current = { x: event.payload.x, y: event.payload.y };
-      cursor.style.display = remoteCursorBitmapRef.current ? "block" : "none";
+      const hasRemoteCursor = remoteCursorBitmapRef.current !== null;
+      canvas.style.cursor = hasRemoteCursor ? "none" : "";
+      cursor.style.display = hasRemoteCursor ? "block" : "none";
       if (cursorRafRef.current === null) {
         cursorRafRef.current = requestAnimationFrame(applyCursorPosition);
       }
@@ -515,6 +522,10 @@ function RdpPaneHost({
         });
         if (!decision.shouldResize) return;
         lastResizeRef.current = { width: decision.width, height: decision.height };
+        if (!didPrimeResizeRef.current) {
+          didPrimeResizeRef.current = true;
+          return;
+        }
         void invoke("rdp_resize", {
           sessionId: pane.sessionId,
           width: decision.width,
