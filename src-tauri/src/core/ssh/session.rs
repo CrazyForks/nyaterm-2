@@ -1,10 +1,11 @@
 use super::auth::{SSH_AGENT_AUTH_RETRY, authenticate_handle, load_saved_ssh_config};
 use super::client::{
-    RemoteForwardOpen, SshConfig, SshConnectionHandles, SshHandle, SshHandler, SshRawHandle,
-    SshStartupCommand, build_client_config, connect_via_stream, connect_with_proxy,
+    RemoteForwardOpen, SshConfig, SshConnectionHandles, SshDiagnosticContext, SshDiagnosticStage,
+    SshHandle, SshHandler, SshRawHandle, SshStartupCommand, build_client_config,
+    connect_via_stream, connect_with_proxy,
 };
 use super::io::{open_shell_channel, ssh_io_loop};
-use crate::config::AiExecutionProfile;
+use crate::config::{AiExecutionProfile, SshProfile, effective_cwd_follow_mode_for_profile};
 use crate::core::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionReadyHook, SessionType,
     SharedCwd,
@@ -30,6 +31,7 @@ async fn create_authenticated_connection(
         None,
         None,
         enable_agent_forwarding,
+        None,
     )
     .await
 }
@@ -40,6 +42,7 @@ async fn create_authenticated_connection_with_notifications(
     disconnect_tx: Option<mpsc::UnboundedSender<String>>,
     remote_forward_tx: Option<mpsc::UnboundedSender<RemoteForwardOpen>>,
     enable_agent_forwarding: bool,
+    diagnostics: Option<SshDiagnosticContext>,
 ) -> AppResult<(
     SshHandle,
     Option<mpsc::UnboundedReceiver<super::x11_forwarding::X11ChannelOpen>>,
@@ -58,6 +61,7 @@ async fn create_authenticated_connection_with_notifications(
         disconnect_tx,
         remote_forward_tx,
         enable_agent_forwarding,
+        diagnostics,
     )
     .await?;
     Ok((
@@ -73,6 +77,7 @@ async fn connect_authenticated_chain(
     disconnect_tx: Option<mpsc::UnboundedSender<String>>,
     remote_forward_tx: Option<mpsc::UnboundedSender<RemoteForwardOpen>>,
     enable_agent_forwarding: bool,
+    diagnostics: Option<SshDiagnosticContext>,
 ) -> AppResult<(SshRawHandle, Vec<SshRawHandle>)> {
     connect_authenticated_chain_boxed(
         app,
@@ -81,6 +86,7 @@ async fn connect_authenticated_chain(
         disconnect_tx,
         remote_forward_tx,
         enable_agent_forwarding,
+        diagnostics,
     )
     .await
 }
@@ -92,6 +98,7 @@ fn connect_authenticated_chain_boxed<'a>(
     disconnect_tx: Option<mpsc::UnboundedSender<String>>,
     remote_forward_tx: Option<mpsc::UnboundedSender<RemoteForwardOpen>>,
     enable_agent_forwarding: bool,
+    diagnostics: Option<SshDiagnosticContext>,
 ) -> Pin<Box<dyn Future<Output = AppResult<(SshRawHandle, Vec<SshRawHandle>)>> + Send + 'a>> {
     Box::pin(async move {
         if let Some(jump_config) = config.proxy_jump.as_deref() {
@@ -104,7 +111,8 @@ fn connect_authenticated_chain_boxed<'a>(
             );
 
             let (jump_handle, mut jumps) =
-                connect_authenticated_chain(app, jump_config, None, None, None, false).await?;
+                connect_authenticated_chain(app, jump_config, None, None, None, false, None)
+                    .await?;
             let channel = {
                 let jump = jump_handle.lock().await;
                 jump.channel_open_direct_tcpip(&config.host, config.port.into(), "127.0.0.1", 0)
@@ -139,6 +147,9 @@ fn connect_authenticated_chain_boxed<'a>(
             if should_attach_agent_forwarding(enable_agent_forwarding, config.agent_forwarding) {
                 target_handler =
                     target_handler.with_agent_forwarding_endpoint(config.agent_endpoint.clone());
+            }
+            if let Some(diagnostics) = diagnostics.clone() {
+                target_handler = target_handler.with_diagnostics(diagnostics);
             }
             let ssh_client_config = Arc::new(build_client_config(app, config)?);
             let mut target_handle =
@@ -181,6 +192,9 @@ fn connect_authenticated_chain_boxed<'a>(
         if should_attach_agent_forwarding(enable_agent_forwarding, config.agent_forwarding) {
             handler = handler.with_agent_forwarding_endpoint(config.agent_endpoint.clone());
         }
+        if let Some(diagnostics) = diagnostics.clone() {
+            handler = handler.with_diagnostics(diagnostics);
+        }
         let ssh_client_config = Arc::new(build_client_config(app, config)?);
         let mut handle = connect_with_proxy(config, ssh_client_config, handler).await?;
         authenticate_handle(
@@ -214,6 +228,22 @@ fn set_owner_window_label(config: &mut SshConfig, owner_window_label: Option<Str
     config.owner_window_label = owner_window_label.clone();
     if let Some(proxy_jump) = config.proxy_jump.as_mut() {
         set_owner_window_label(proxy_jump, owner_window_label);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SshRuntimeCapabilities {
+    remote_file_browser_enabled: bool,
+    remote_stats_enabled: bool,
+    network_device_profile: bool,
+}
+
+fn resolve_runtime_capabilities(config: &SshConfig) -> SshRuntimeCapabilities {
+    let network_device_profile = config.ssh_profile == SshProfile::NetworkDevice;
+    SshRuntimeCapabilities {
+        remote_file_browser_enabled: config.sftp.enabled && !network_device_profile,
+        remote_stats_enabled: !network_device_profile,
+        network_device_profile,
     }
 }
 
@@ -252,6 +282,7 @@ pub async fn create_ssh_handle_for_tunnel(
             Some(disconnect_tx.clone()),
             remote_forward_tx.clone(),
             false,
+            None,
         )
         .await
         {
@@ -317,6 +348,7 @@ async fn create_ssh_session_inner(
     );
 
     let session_id = uuid::Uuid::new_v4().to_string();
+    let diagnostics = SshDiagnosticContext::new(Some(session_id.clone()));
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<SessionCommand>();
 
     let x11_config = if config.x11_forwarding {
@@ -325,11 +357,38 @@ async fn create_ssh_session_inner(
         None
     };
     let (ssh_connection, x11_rx) = loop {
-        match create_authenticated_connection(&app, &config, true).await {
+        match create_authenticated_connection_with_notifications(
+            &app,
+            &config,
+            None,
+            None,
+            true,
+            Some(diagnostics.clone()),
+        )
+        .await
+        {
             Err(error) if is_agent_auth_retry(&error) => continue,
             result => break result,
         }
     }?;
+    diagnostics.set_stage(SshDiagnosticStage::Authenticated);
+    let capabilities = resolve_runtime_capabilities(&config);
+    let effective_cwd_follow_mode =
+        effective_cwd_follow_mode_for_profile(&config.sftp, &config.ssh_profile);
+    tracing::info!(
+        session_id = %session_id,
+        host = %config.host,
+        port = config.port,
+        ssh_profile = ?config.ssh_profile,
+        terminal_type = %config.terminal_type.as_str(),
+        sftp_enabled = config.sftp.enabled,
+        cwd_follow_mode = ?config.sftp.cwd_follow_mode,
+        effective_cwd_follow_mode = ?effective_cwd_follow_mode,
+        remote_file_browser_enabled = capabilities.remote_file_browser_enabled,
+        remote_stats_enabled = capabilities.remote_stats_enabled,
+        shell_detection_timeout_ms = config.sftp.shell_detection_timeout_ms,
+        "SSH session initialization starting"
+    );
     let handle_mtx = ssh_connection.target_handle();
     let mut handle = handle_mtx.lock().await;
 
@@ -339,8 +398,12 @@ async fn create_ssh_session_inner(
             &session_id,
             x11_config.as_ref().map(|cfg| cfg.fake_cookie_hex.as_str()),
             config.agent_forwarding,
-            config.sftp.cwd_follow_mode.clone(),
+            config.terminal_type.as_str(),
+            capabilities.remote_file_browser_enabled,
+            capabilities.network_device_profile,
+            effective_cwd_follow_mode,
             config.sftp.shell_detection_timeout_ms,
+            Some(diagnostics.clone()),
         )
         .await?;
     drop(handle);
@@ -359,7 +422,9 @@ async fn create_ssh_session_inner(
         owner_window_label,
         ai_execution_profile: AiExecutionProfile::Posix,
         injection_active,
-        remote_file_browser_enabled: config.sftp.enabled,
+        remote_file_browser_enabled: capabilities.remote_file_browser_enabled,
+        remote_stats_enabled: capabilities.remote_stats_enabled,
+        ssh_profile: Some(config.ssh_profile.clone()),
     };
 
     let cwd: SharedCwd = Arc::new(tokio::sync::Mutex::new(None));
@@ -376,6 +441,7 @@ async fn create_ssh_session_inner(
         remote_fs: None,
     };
     manager.add_session(session_handle).await;
+    tracing::info!(session_id = %session_id, "SSH session registered");
     if let Some(hook) = session_ready_hook.as_ref() {
         hook(&session_info);
     }
@@ -420,11 +486,10 @@ async fn create_ssh_session_inner(
             backspace_mode,
             initial_notice,
             encoding,
+            Some(diagnostics),
         )
         .await;
     });
-
-    tracing::info!(session_id = %session_id, "SSH session created");
     Ok(session_id)
 }
 
@@ -479,6 +544,26 @@ pub async fn create_multiplexed_ssh_session(
     );
 
     let session_id = uuid::Uuid::new_v4().to_string();
+    let diagnostics = SshDiagnosticContext::new(Some(session_id.clone()));
+    diagnostics.set_stage(SshDiagnosticStage::Authenticated);
+    let capabilities = resolve_runtime_capabilities(&config);
+    let effective_cwd_follow_mode =
+        effective_cwd_follow_mode_for_profile(&config.sftp, &config.ssh_profile);
+    tracing::info!(
+        session_id = %session_id,
+        source_session_id,
+        host = %config.host,
+        port = config.port,
+        ssh_profile = ?config.ssh_profile,
+        terminal_type = %config.terminal_type.as_str(),
+        sftp_enabled = config.sftp.enabled,
+        cwd_follow_mode = ?config.sftp.cwd_follow_mode,
+        effective_cwd_follow_mode = ?effective_cwd_follow_mode,
+        remote_file_browser_enabled = capabilities.remote_file_browser_enabled,
+        remote_stats_enabled = capabilities.remote_stats_enabled,
+        shell_detection_timeout_ms = config.sftp.shell_detection_timeout_ms,
+        "SSH session initialization starting"
+    );
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<SessionCommand>();
 
     if config.x11_forwarding {
@@ -506,8 +591,12 @@ pub async fn create_multiplexed_ssh_session(
             &session_id,
             None,
             config.agent_forwarding,
-            config.sftp.cwd_follow_mode.clone(),
+            config.terminal_type.as_str(),
+            capabilities.remote_file_browser_enabled,
+            capabilities.network_device_profile,
+            effective_cwd_follow_mode,
             config.sftp.shell_detection_timeout_ms,
+            Some(diagnostics.clone()),
         )
         .await?;
     drop(handle);
@@ -522,7 +611,9 @@ pub async fn create_multiplexed_ssh_session(
         owner_window_label,
         ai_execution_profile: AiExecutionProfile::Posix,
         injection_active,
-        remote_file_browser_enabled: config.sftp.enabled,
+        remote_file_browser_enabled: capabilities.remote_file_browser_enabled,
+        remote_stats_enabled: capabilities.remote_stats_enabled,
+        ssh_profile: Some(config.ssh_profile.clone()),
     };
 
     let cwd: SharedCwd = Arc::new(tokio::sync::Mutex::new(None));
@@ -539,6 +630,11 @@ pub async fn create_multiplexed_ssh_session(
         remote_fs: None,
     };
     manager.add_session(session_handle).await;
+    tracing::info!(
+        session_id = %session_id,
+        source_session_id,
+        "Multiplexed SSH session registered"
+    );
     if let Some(hook) = session_ready_hook.as_ref() {
         hook(&session_info);
     }
@@ -570,21 +666,20 @@ pub async fn create_multiplexed_ssh_session(
             backspace_mode,
             initial_notice,
             encoding,
+            Some(diagnostics),
         )
         .await;
     });
-
-    tracing::info!(
-        session_id = %session_id,
-        source_session_id,
-        "Multiplexed SSH session created"
-    );
     Ok(session_id)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_agent_auth_retry, should_attach_agent_forwarding};
+    use super::{
+        is_agent_auth_retry, resolve_runtime_capabilities, should_attach_agent_forwarding,
+    };
+    use crate::config::{SftpSettings, SshAgentEndpoint, SshProfile, SshTerminalType};
+    use crate::core::ssh::client::{SshAuth, SshConfig};
     use crate::error::AppError;
 
     #[test]
@@ -606,5 +701,53 @@ mod tests {
         assert!(!is_agent_auth_retry(&AppError::Cancelled(
             super::SSH_AGENT_AUTH_RETRY.to_string()
         )));
+    }
+
+    fn test_config(profile: SshProfile) -> SshConfig {
+        SshConfig {
+            connection_id: None,
+            owner_window_label: None,
+            name: "test".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            username: "root".to_string(),
+            auth: SshAuth::None,
+            backspace_mode: "del".to_string(),
+            x11_forwarding: false,
+            x11_display: String::new(),
+            agent_endpoint: SshAgentEndpoint::Auto,
+            agent_forwarding: false,
+            proxy: None,
+            proxy_jump: None,
+            post_login: None,
+            ssh_algorithms: None,
+            ssh_profile: profile,
+            terminal_type: SshTerminalType::default(),
+            sftp: SftpSettings::default(),
+            encoding: "UTF-8".to_string(),
+        }
+    }
+
+    #[test]
+    fn network_device_runtime_capabilities_disable_linux_only_features() {
+        let config = test_config(SshProfile::NetworkDevice);
+
+        let capabilities = resolve_runtime_capabilities(&config);
+
+        assert!(!capabilities.remote_file_browser_enabled);
+        assert!(!capabilities.remote_stats_enabled);
+        assert!(capabilities.network_device_profile);
+    }
+
+    #[test]
+    fn standard_runtime_capabilities_preserve_sftp_file_browser_choice() {
+        let mut enabled = test_config(SshProfile::Standard);
+        enabled.sftp.enabled = true;
+        let mut disabled = test_config(SshProfile::Standard);
+        disabled.sftp.enabled = false;
+
+        assert!(resolve_runtime_capabilities(&enabled).remote_file_browser_enabled);
+        assert!(!resolve_runtime_capabilities(&disabled).remote_file_browser_enabled);
+        assert!(resolve_runtime_capabilities(&enabled).remote_stats_enabled);
     }
 }

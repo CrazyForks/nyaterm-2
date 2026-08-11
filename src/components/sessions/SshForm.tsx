@@ -14,6 +14,7 @@ import {
 import { ConnectionCombobox, type ConnectionOption } from "@/components/network/shared";
 import { KeyManagementTab } from "@/components/panel/security-auth/KeyManagementTab";
 import { PasswordManagementTab } from "@/components/panel/security-auth/PasswordManagementTab";
+import { ConnectionRecordingSettings } from "@/components/sessions/ConnectionRecordingSettings";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -53,12 +54,15 @@ import type {
   AlgorithmOption,
   OtpEntry,
   ProxyConfig,
+  RecordingMode,
   SavedPassword,
   SftpSettings,
   SshAlgorithmDefaults,
   SshAlgorithmPreferences,
   SshAgentEndpoint,
   SshKey,
+  SshProfile,
+  SshTerminalType,
   SupportedSshAlgorithms,
 } from "@/types/global";
 
@@ -68,6 +72,7 @@ const MIN_SFTP_SHELL_DETECTION_TIMEOUT_MS = 100;
 const MAX_SFTP_SHELL_DETECTION_TIMEOUT_MS = 60_000;
 export type SshAuthMode = "none" | "password" | "key" | "agent";
 type PasswordSource = "ask" | "direct" | "saved";
+type SshTerminalTypeSelection = SshTerminalType | "default";
 
 function isSupportedSshAgentEndpoint(type: SshAgentEndpoint["type"]): boolean {
   if (type === "auto") return true;
@@ -121,8 +126,18 @@ interface SshFormProps {
   setAgentForwarding: (v: boolean) => void;
   sshAlgorithms: SshAlgorithmPreferences;
   setSshAlgorithms: (v: SshAlgorithmPreferences) => void;
+  sshProfile: SshProfile;
+  setSshProfile: (v: SshProfile) => void;
+  sshTerminalType: SshTerminalTypeSelection;
+  setSshTerminalType: (v: SshTerminalTypeSelection) => void;
   sftpSettings: SftpSettings;
   setSftpSettings: (v: SftpSettings) => void;
+  recordingUseGlobal: boolean;
+  setRecordingUseGlobal: (v: boolean) => void;
+  recordingAutoStart: boolean;
+  setRecordingAutoStart: (v: boolean) => void;
+  recordingMode: RecordingMode;
+  setRecordingMode: (v: RecordingMode) => void;
   connectionId?: string;
   encoding: string;
   setEncoding: (v: string) => void;
@@ -447,8 +462,18 @@ export function SshForm({
   setAgentForwarding,
   sshAlgorithms,
   setSshAlgorithms,
+  sshProfile,
+  setSshProfile,
+  sshTerminalType,
+  setSshTerminalType,
   sftpSettings,
   setSftpSettings,
+  recordingUseGlobal,
+  setRecordingUseGlobal,
+  recordingAutoStart,
+  setRecordingAutoStart,
+  recordingMode,
+  setRecordingMode,
   connectionId,
   encoding,
   setEncoding,
@@ -596,6 +621,9 @@ export function SshForm({
       [key]: value,
     });
   };
+  const networkDeviceProfile = sshProfile === "network_device";
+  const sftpDisabled = !sftpSettings.enabled || networkDeviceProfile;
+  const defaultTerminalType = networkDeviceProfile ? "vt100" : "xterm-256color";
 
   const toggleDirectPasswordVisibility = async () => {
     if (showDirectPassword) {
@@ -1231,7 +1259,67 @@ export function SshForm({
             </TabsContent>
 
             <TabsContent value="terminal" className="mt-3 border-0 outline-none">
-              <div className="rounded-lg border bg-accent/25 p-3">
+              <div className="space-y-3 rounded-lg border bg-accent/25 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label className="text-xs font-medium text-foreground/80">
+                      {t("dialog.sshProfile")}
+                    </Label>
+                    <Select
+                      value={sshProfile}
+                      onValueChange={(value) => setSshProfile(value as SshProfile)}
+                    >
+                      <SelectTrigger className="mt-1 h-8 text-xs font-normal">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">{t("dialog.sshProfileStandard")}</SelectItem>
+                        <SelectItem value="network_device">
+                          {t("dialog.sshProfileNetworkDevice")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-2 text-[0.6875rem] leading-relaxed text-muted-foreground">
+                      {networkDeviceProfile
+                        ? t("dialog.sshProfileNetworkDeviceDesc")
+                        : t("dialog.sshProfileStandardDesc")}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium text-foreground/80">
+                      {t("dialog.sshTerminalType")}
+                    </Label>
+                    <Select
+                      value={sshTerminalType}
+                      onValueChange={(value) =>
+                        setSshTerminalType(value as SshTerminalTypeSelection)
+                      }
+                    >
+                      <SelectTrigger className="mt-1 h-8 text-xs font-normal">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">
+                          {t("dialog.sshTerminalTypeDefault", { value: defaultTerminalType })}
+                        </SelectItem>
+                        <SelectItem value="xterm-256color">xterm-256color</SelectItem>
+                        <SelectItem value="xterm">xterm</SelectItem>
+                        <SelectItem value="vt100">vt100</SelectItem>
+                        <SelectItem value="vt220">vt220</SelectItem>
+                        <SelectItem value="ansi">ansi</SelectItem>
+                        <SelectItem value="linux">linux</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-2 text-[0.6875rem] leading-relaxed text-muted-foreground">
+                      {t("dialog.sshTerminalTypeDesc")}
+                    </p>
+                  </div>
+                </div>
+                {networkDeviceProfile && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.6875rem] leading-relaxed text-amber-800 dark:text-amber-200">
+                    {t("dialog.sshProfileNetworkDeviceRuntimeDesc")}
+                  </div>
+                )}
                 <div className="max-w-md">
                   <Label className="text-xs font-medium text-foreground/80">
                     {t("connection.encoding")}
@@ -1249,6 +1337,14 @@ export function SshForm({
                     </SelectContent>
                   </Select>
                 </div>
+                <ConnectionRecordingSettings
+                  useGlobal={recordingUseGlobal}
+                  onUseGlobalChange={setRecordingUseGlobal}
+                  autoStart={recordingAutoStart}
+                  onAutoStartChange={setRecordingAutoStart}
+                  mode={recordingMode}
+                  onModeChange={setRecordingMode}
+                />
               </div>
             </TabsContent>
 
@@ -1264,6 +1360,7 @@ export function SshForm({
                   <div className="flex shrink-0 items-center gap-2">
                     <Switch
                       checked={sftpSettings.enabled}
+                      disabled={networkDeviceProfile}
                       onCheckedChange={(enabled) =>
                         setSftpSettings({
                           ...sftpSettings,
@@ -1282,6 +1379,7 @@ export function SshForm({
                     {t("dialog.sftpCwdFollowMode")}
                   </Label>
                   <Select
+                    disabled={sftpDisabled}
                     value={sftpSettings.cwd_follow_mode}
                     onValueChange={(cwd_follow_mode) =>
                       setSftpSettings({
@@ -1329,7 +1427,7 @@ export function SshForm({
                       min={MIN_SFTP_SHELL_DETECTION_TIMEOUT_MS}
                       max={MAX_SFTP_SHELL_DETECTION_TIMEOUT_MS}
                       step={100}
-                      disabled={sftpSettings.cwd_follow_mode === "off"}
+                      disabled={sftpDisabled || sftpSettings.cwd_follow_mode === "off"}
                     />
                     <span className="shrink-0 text-[0.625rem] text-muted-foreground">ms</span>
                   </div>
@@ -1342,6 +1440,7 @@ export function SshForm({
                     {t("dialog.sftpFilenameEncoding")}
                   </Label>
                   <Select
+                    disabled={sftpDisabled}
                     value={sftpSettings.filename_encoding || "terminal"}
                     onValueChange={(filename_encoding) =>
                       setSftpSettings({

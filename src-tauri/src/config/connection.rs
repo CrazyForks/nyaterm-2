@@ -78,6 +78,44 @@ pub enum SftpCwdFollowMode {
     RcFile,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SshProfile {
+    #[default]
+    Standard,
+    NetworkDevice,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum SshTerminalType {
+    #[default]
+    #[serde(rename = "xterm-256color")]
+    Xterm256Color,
+    #[serde(rename = "xterm")]
+    Xterm,
+    #[serde(rename = "vt100")]
+    Vt100,
+    #[serde(rename = "vt220")]
+    Vt220,
+    #[serde(rename = "ansi")]
+    Ansi,
+    #[serde(rename = "linux")]
+    Linux,
+}
+
+impl SshTerminalType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Xterm256Color => "xterm-256color",
+            Self::Xterm => "xterm",
+            Self::Vt100 => "vt100",
+            Self::Vt220 => "vt220",
+            Self::Ansi => "ansi",
+            Self::Linux => "linux",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SftpSettings {
     #[serde(default = "default_true")]
@@ -104,6 +142,41 @@ impl Default for SftpSettings {
     }
 }
 
+pub fn effective_cwd_follow_mode(settings: &SftpSettings) -> SftpCwdFollowMode {
+    if settings.enabled {
+        settings.cwd_follow_mode.clone()
+    } else {
+        SftpCwdFollowMode::Off
+    }
+}
+
+pub fn effective_cwd_follow_mode_for_profile(
+    settings: &SftpSettings,
+    profile: &SshProfile,
+) -> SftpCwdFollowMode {
+    if *profile == SshProfile::NetworkDevice {
+        SftpCwdFollowMode::Off
+    } else {
+        effective_cwd_follow_mode(settings)
+    }
+}
+
+pub fn default_terminal_type_for_profile(profile: &SshProfile) -> SshTerminalType {
+    match profile {
+        SshProfile::Standard => SshTerminalType::Xterm256Color,
+        SshProfile::NetworkDevice => SshTerminalType::Vt100,
+    }
+}
+
+pub fn resolve_ssh_terminal_type(
+    profile: &SshProfile,
+    terminal_type: Option<&SshTerminalType>,
+) -> SshTerminalType {
+    terminal_type
+        .cloned()
+        .unwrap_or_else(|| default_terminal_type_for_profile(profile))
+}
+
 pub const MIN_SFTP_SHELL_DETECTION_TIMEOUT_MS: u64 = 100;
 pub const MAX_SFTP_SHELL_DETECTION_TIMEOUT_MS: u64 = 60_000;
 
@@ -117,6 +190,10 @@ fn is_default_sftp_shell_detection_timeout_ms(value: &u64) -> bool {
 
 fn is_default_sftp_settings(value: &SftpSettings) -> bool {
     value == &SftpSettings::default()
+}
+
+fn is_standard_ssh_profile(value: &SshProfile) -> bool {
+    *value == SshProfile::Standard
 }
 
 /// Type-specific configuration for each connection kind.
@@ -615,6 +692,10 @@ pub struct SavedConnection {
     pub recording: Option<ConnectionRecordingSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ssh_algorithms: Option<SshAlgorithmPreferences>,
+    #[serde(default, skip_serializing_if = "is_standard_ssh_profile")]
+    pub ssh_profile: SshProfile,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_type: Option<SshTerminalType>,
     #[serde(default, skip_serializing_if = "is_default_sftp_settings")]
     pub sftp: SftpSettings,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -795,7 +876,9 @@ pub fn save_config(app: &AppHandle, config: &AppConfig) -> AppResult<()> {
 mod tests {
     use super::{
         AssetAcceleratorType, AssetDeviceType, AssetDiskKind, AssetDiskPurpose, ConnectionType,
-        SavedConnection, SftpCwdFollowMode, SshAgentEndpoint, SshAlgorithmMode,
+        SavedConnection, SftpCwdFollowMode, SftpSettings, SshAgentEndpoint, SshAlgorithmMode,
+        SshProfile, SshTerminalType, effective_cwd_follow_mode,
+        effective_cwd_follow_mode_for_profile, resolve_ssh_terminal_type,
     };
 
     #[test]
@@ -864,6 +947,67 @@ mod tests {
     }
 
     #[test]
+    fn saved_connection_defaults_missing_ssh_profile_to_standard() {
+        let connection: SavedConnection = serde_json::from_value(serde_json::json!({
+            "id": "conn-1",
+            "name": "Test",
+            "type": "ssh",
+            "host": "example.com",
+            "port": 22,
+            "username": "root"
+        }))
+        .expect("connection");
+
+        assert_eq!(connection.ssh_profile, SshProfile::Standard);
+        assert!(connection.terminal_type.is_none());
+        assert_eq!(
+            resolve_ssh_terminal_type(&connection.ssh_profile, connection.terminal_type.as_ref()),
+            SshTerminalType::Xterm256Color
+        );
+    }
+
+    #[test]
+    fn network_device_defaults_terminal_type_to_vt100() {
+        let connection: SavedConnection = serde_json::from_value(serde_json::json!({
+            "id": "conn-1",
+            "name": "Switch",
+            "type": "ssh",
+            "host": "example.com",
+            "port": 22,
+            "username": "admin",
+            "ssh_profile": "network_device"
+        }))
+        .expect("connection");
+
+        assert_eq!(connection.ssh_profile, SshProfile::NetworkDevice);
+        assert_eq!(
+            resolve_ssh_terminal_type(&connection.ssh_profile, connection.terminal_type.as_ref()),
+            SshTerminalType::Vt100
+        );
+    }
+
+    #[test]
+    fn custom_terminal_type_is_preserved() {
+        let connection: SavedConnection = serde_json::from_value(serde_json::json!({
+            "id": "conn-1",
+            "name": "Switch",
+            "type": "ssh",
+            "host": "example.com",
+            "port": 22,
+            "username": "admin",
+            "ssh_profile": "network_device",
+            "terminal_type": "vt220"
+        }))
+        .expect("connection");
+
+        assert_eq!(connection.terminal_type, Some(SshTerminalType::Vt220));
+        assert_eq!(
+            resolve_ssh_terminal_type(&connection.ssh_profile, connection.terminal_type.as_ref()),
+            SshTerminalType::Vt220
+        );
+    }
+
+    #[test]
     fn saved_connection_defaults_missing_sftp_settings() {
         let connection: SavedConnection = serde_json::from_value(serde_json::json!({
             "id": "conn-1",
@@ -901,6 +1045,64 @@ mod tests {
         .expect("connection");
 
         assert_eq!(connection.sftp.shell_detection_timeout_ms, 5000);
+    }
+
+    #[test]
+    fn effective_cwd_follow_is_off_when_sftp_disabled_without_mutating_setting() {
+        let settings = SftpSettings {
+            enabled: false,
+            cwd_follow_mode: SftpCwdFollowMode::ShellIntegration,
+            ..SftpSettings::default()
+        };
+
+        assert_eq!(effective_cwd_follow_mode(&settings), SftpCwdFollowMode::Off);
+        assert_eq!(
+            settings.cwd_follow_mode,
+            SftpCwdFollowMode::ShellIntegration
+        );
+    }
+
+    #[test]
+    fn effective_cwd_follow_keeps_off_when_sftp_enabled_and_mode_off() {
+        let settings = SftpSettings {
+            enabled: true,
+            cwd_follow_mode: SftpCwdFollowMode::Off,
+            ..SftpSettings::default()
+        };
+
+        assert_eq!(effective_cwd_follow_mode(&settings), SftpCwdFollowMode::Off);
+    }
+
+    #[test]
+    fn effective_cwd_follow_keeps_shell_integration_when_sftp_enabled() {
+        let settings = SftpSettings {
+            enabled: true,
+            cwd_follow_mode: SftpCwdFollowMode::ShellIntegration,
+            ..SftpSettings::default()
+        };
+
+        assert_eq!(
+            effective_cwd_follow_mode(&settings),
+            SftpCwdFollowMode::ShellIntegration
+        );
+    }
+
+    #[test]
+    fn network_device_effective_cwd_follow_is_off_without_mutating_setting() {
+        let settings = SftpSettings {
+            enabled: true,
+            cwd_follow_mode: SftpCwdFollowMode::ShellIntegration,
+            ..SftpSettings::default()
+        };
+
+        assert_eq!(
+            effective_cwd_follow_mode_for_profile(&settings, &SshProfile::NetworkDevice),
+            SftpCwdFollowMode::Off
+        );
+        assert_eq!(
+            settings.cwd_follow_mode,
+            SftpCwdFollowMode::ShellIntegration
+        );
     }
 
     #[test]

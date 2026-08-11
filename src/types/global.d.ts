@@ -22,6 +22,8 @@ export interface AppSupportInfo {
 
 /** AI Agent command execution wrapper profile. */
 export type AIExecutionProfile = "auto" | "posix" | "powershell" | "cmd" | "send_only" | "disabled";
+export type SshProfile = "standard" | "network_device";
+export type SshTerminalType = "xterm-256color" | "xterm" | "vt100" | "vt220" | "ansi" | "linux";
 
 /** A group of sessions whose terminal input is broadcast to all members. */
 export interface SyncGroup {
@@ -53,6 +55,10 @@ export interface SessionInfo {
   injection_active: boolean;
   /** True when the remote file browser is enabled for this session. */
   remote_file_browser_enabled: boolean;
+  /** True when Linux-style remote resource stats are enabled for this session. */
+  remote_stats_enabled: boolean;
+  /** SSH runtime profile used for capability gating. */
+  ssh_profile?: SshProfile | null;
 }
 
 /** Shared fields for one session-like leaf inside a workspace tab. */
@@ -138,6 +144,8 @@ export interface SshConfig {
   proxy_jump?: SshConfig | null;
   post_login?: { command: string; delay_ms: number } | null;
   ssh_algorithms?: SshAlgorithmPreferences | null;
+  ssh_profile?: SshProfile;
+  terminal_type?: SshTerminalType;
   sftp?: SftpSettings;
   encoding?: string;
 }
@@ -360,6 +368,10 @@ export interface SavedConnection {
   post_login?: ConnectionPostLogin;
   recording?: ConnectionRecordingSettings;
   ssh_algorithms?: SshAlgorithmPreferences;
+  /** SSH-only: runtime profile. Network devices skip Linux-only probes and integrations. */
+  ssh_profile?: SshProfile;
+  /** SSH-only: PTY terminal type. Omitted means profile default. */
+  terminal_type?: SshTerminalType;
   sftp?: SftpSettings;
   asset?: AssetMetadata;
   /** SSH-specific fields (present when type === "ssh"). */
@@ -1629,11 +1641,15 @@ export interface GithubGistDeviceFlowPoll {
 export interface CloudConflictPreview {
   detected_at_ms: number;
   provider: string;
+  kind?: "content_conflict" | "remote_inconsistent";
   local_payload_hash: string;
   remote_payload_hash: string;
   remote_revision: string;
   remote_created_at_ms: number;
   remote_device_id: string;
+  recovery_revision?: string | null;
+  recovery_payload_hash?: string | null;
+  recovery_created_at_ms?: number | null;
   message: string;
 }
 

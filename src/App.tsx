@@ -9,6 +9,7 @@ import AppPanelContent from "./components/app/AppPanelContent";
 import ExternalConnectionMatchDialog from "./components/dialog/connections/ExternalConnectionMatchDialog";
 import type { HostKeyVerifyRequest } from "./components/dialog/connections/HostKeyVerifyDialog";
 import type { OtpRequest } from "./components/dialog/connections/OtpDialog";
+import type { RdpCertificateVerifyRequest } from "./components/dialog/connections/RdpCertificateVerifyDialog";
 import type { SshAuthRequest } from "./components/dialog/connections/SshAuthDialog";
 import type { SshAgentAuthRequest } from "./components/dialog/connections/SshAgentAuthDialog";
 import TemporarySshLinkDialog from "./components/dialog/connections/TemporarySshLinkDialog";
@@ -29,7 +30,10 @@ import {
 import { useApp } from "./context/AppContext";
 import { TransferProvider } from "./context/TransferContext";
 import { useActivityBarController } from "./hooks/useActivityBarController";
-import { type ExternalOpenRequest, useExternalOpenRequests } from "./hooks/useExternalOpenRequests";
+import {
+  type ExternalOpenRequest,
+  useExternalOpenRequests,
+} from "./hooks/useExternalOpenRequests";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useIdleLock } from "./hooks/useIdleLock";
 import { useMacSelectionGuard } from "./hooks/useMacSelectionGuard";
@@ -51,7 +55,9 @@ function upsertSecurityPrompt(
   current: SecurityPrompt[],
   prompt: SecurityPrompt,
 ): SecurityPrompt[] {
-  const index = current.findIndex((item) => item.request.requestId === prompt.request.requestId);
+  const index = current.findIndex(
+    (item) => item.request.requestId === prompt.request.requestId,
+  );
   if (index < 0) return [...current, prompt];
   const next = [...current];
   next[index] = prompt;
@@ -80,7 +86,10 @@ import {
   recordAssetMonitoringPatch,
 } from "./lib/assetMonitoring";
 import { updateConnectionAutoIconAfterSessionStart } from "./lib/connectionAutoIcon";
-import { getErrorMessage, shouldPromptConnectionEditOnFailure } from "./lib/errors";
+import {
+  getErrorMessage,
+  shouldPromptConnectionEditOnFailure,
+} from "./lib/errors";
 import {
   type ExternalConnectionResolution,
   findExternalConnectionMatches,
@@ -100,7 +109,10 @@ import {
   sendSessionInputWithSync,
 } from "./lib/sessionInput";
 import { buildSmartSplitLayout, type SmartSplitMode } from "./lib/smartSplit";
-import { getSessionInputPeerIds, purgeSessionFromGroups } from "./lib/syncInputGroups";
+import {
+  getSessionInputPeerIds,
+  purgeSessionFromGroups,
+} from "./lib/syncInputGroups";
 import {
   findTerminalWindowLeafById,
   findTerminalWindowLeafByTabId,
@@ -157,7 +169,10 @@ import type {
   WorkspaceSessionType,
 } from "./types/global";
 
-const CONNECTION_SESSION_TYPES: Record<SavedConnection["type"], WorkspaceSessionType> = {
+const CONNECTION_SESSION_TYPES: Record<
+  SavedConnection["type"],
+  WorkspaceSessionType
+> = {
   ssh: "SSH",
   local_terminal: "Local",
   telnet: "Telnet",
@@ -171,8 +186,19 @@ function getConnectionSessionType(
   return connection ? CONNECTION_SESSION_TYPES[connection.type] : "SSH";
 }
 
+function getRdpPaneDisplay(connection: SavedConnection | null | undefined) {
+  if (connection?.type !== "rdp") return undefined;
+  return {
+    remoteWidth: connection.display?.width ?? 1920,
+    remoteHeight: connection.display?.height ?? 1080,
+    scaleMode: connection.display?.mode === "fit-window" ? "fit" : "actual",
+  } as const;
+}
+
 function isSessionCreationCancelled(error: unknown) {
-  return getErrorMessage(error).toLowerCase().includes("session creation cancelled");
+  return getErrorMessage(error)
+    .toLowerCase()
+    .includes("session creation cancelled");
 }
 
 async function attachSessionBeforeClose(sessionId: string) {
@@ -261,7 +287,10 @@ async function createSessionForConnection(
   }
 }
 
-async function createTemporarySession(config: TemporaryLinkConfig, createRequestId?: string) {
+async function createTemporarySession(
+  config: TemporaryLinkConfig,
+  createRequestId?: string,
+) {
   switch (config.protocol) {
     case "telnet":
       return invoke<string>("create_telnet_session", {
@@ -313,19 +342,28 @@ async function sendStartupCommandToSession(
   sessionId: string,
   startupCommand: StartupCommandRequest,
 ) {
-  const delayMs = Math.max(0, Math.min(60000, Math.round(startupCommand.delayMs)));
+  const delayMs = Math.max(
+    0,
+    Math.min(60000, Math.round(startupCommand.delayMs)),
+  );
   if (delayMs > 0) {
     await new Promise((resolve) => window.setTimeout(resolve, delayMs));
   }
-  await sendSessionInput(sessionId, buildTerminalCommandInput(startupCommand.command), {
-    preview: { kind: "reset" },
-    registerSubmission: startupCommand.command,
-    origin: "startup_command",
-  });
+  await sendSessionInput(
+    sessionId,
+    buildTerminalCommandInput(startupCommand.command),
+    {
+      preview: { kind: "reset" },
+      registerSubmission: startupCommand.command,
+      origin: "startup_command",
+    },
+  );
 }
 
 function safeRecordingName(name: string) {
-  return name.normalize("NFC").replace(/[^\p{L}\p{M}\p{N}._-]+/gu, "_") || "session";
+  return (
+    name.normalize("NFC").replace(/[^\p{L}\p{M}\p{N}._-]+/gu, "_") || "session"
+  );
 }
 
 function joinPath(dir: string, fileName: string) {
@@ -428,13 +466,15 @@ function App() {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [helpDotVisible, setHelpDotVisible] = useState(false);
-  const [sendCommandDraft, setSendCommandDraft] = useState<SendCommandPanelDraft | null>(null);
-  const [showSessionQuickSwitcher, setShowSessionQuickSwitcher] = useState(false);
+  const [sendCommandDraft, setSendCommandDraft] =
+    useState<SendCommandPanelDraft | null>(null);
+  const [showSessionQuickSwitcher, setShowSessionQuickSwitcher] =
+    useState(false);
   const [showTemporarySshLink, setShowTemporarySshLink] = useState(false);
-  const [externalMatchDialog, setExternalMatchDialog] = useState<ExternalMatchDialogState | null>(
-    null,
-  );
-  const [postLoginConfirm, setPostLoginConfirm] = useState<PostLoginConfirmState | null>(null);
+  const [externalMatchDialog, setExternalMatchDialog] =
+    useState<ExternalMatchDialogState | null>(null);
+  const [postLoginConfirm, setPostLoginConfirm] =
+    useState<PostLoginConfirmState | null>(null);
   const allowProgrammaticWindowCloseRef = useRef(false);
   const handleSendCommandDraftConsumed = useCallback(() => {
     setSendCommandDraft(null);
@@ -448,18 +488,30 @@ function App() {
   }, [updateUi]);
 
   // Recording state: active file recording statuses reported by the backend.
-  const [recordingStatuses, setRecordingStatuses] = useState<RecordingStatus[]>([]);
+  const [recordingStatuses, setRecordingStatuses] = useState<RecordingStatus[]>(
+    [],
+  );
   const recordingSessions = useMemo(
     () => new Set(recordingStatuses.map((status) => status.sessionId)),
     [recordingStatuses],
   );
-  const [liveSessionIds, setLiveSessionIds] = useState<Set<string> | null>(null);
-  const assetMonitoringCacheRef = useRef<Map<string, AssetMonitoringCacheEntry>>(new Map());
+  const [liveSessionIds, setLiveSessionIds] = useState<Set<string> | null>(
+    null,
+  );
+  const [liveSessionsById, setLiveSessionsById] = useState<Map<
+    string,
+    SessionInfo
+  > | null>(null);
+  const assetMonitoringCacheRef = useRef<
+    Map<string, AssetMonitoringCacheEntry>
+  >(new Map());
   const assetMonitoringFlushesRef = useRef<Set<string>>(new Set());
 
   const refreshRecordingStatuses = useCallback(async () => {
     try {
-      const statuses = await invoke<RecordingStatus[]>("list_recording_statuses");
+      const statuses = await invoke<RecordingStatus[]>(
+        "list_recording_statuses",
+      );
       setRecordingStatuses(statuses);
     } catch (error) {
       logger.error({
@@ -476,9 +528,12 @@ function App() {
     const unlistenSessions = listen("sessions-changed", () => {
       void refreshRecordingStatuses();
     });
-    const unlistenRecording = listen<RecordingStatus>("recording-status-changed", () => {
-      void refreshRecordingStatuses();
-    });
+    const unlistenRecording = listen<RecordingStatus>(
+      "recording-status-changed",
+      () => {
+        void refreshRecordingStatuses();
+      },
+    );
     return () => {
       unlistenSessions.then((dispose) => dispose());
       unlistenRecording.then((dispose) => dispose());
@@ -493,6 +548,9 @@ function App() {
         const sessions = await invoke<SessionInfo[]>("list_sessions");
         if (!disposed) {
           setLiveSessionIds(new Set(sessions.map((session) => session.id)));
+          setLiveSessionsById(
+            new Map(sessions.map((session) => [session.id, session])),
+          );
         }
       } catch (error) {
         logger.error({
@@ -518,7 +576,10 @@ function App() {
   useEffect(() => {
     if (!settingsLoaded) return;
     void invoke("set_recording_memory_limit", {
-      maxBytes: Math.max(1, appSettings.recording.memory_limit_bytes || 5 * 1024 * 1024),
+      maxBytes: Math.max(
+        1,
+        appSettings.recording.memory_limit_bytes || 5 * 1024 * 1024,
+      ),
     }).catch((error) => {
       logger.error({
         domain: "settings.persistence",
@@ -529,15 +590,22 @@ function App() {
     });
   }, [appSettings.recording.memory_limit_bytes, settingsLoaded]);
 
-  const [securityPromptQueue, setSecurityPromptQueue] = useState<SecurityPrompt[]>([]);
+  const [securityPromptQueue, setSecurityPromptQueue] = useState<
+    SecurityPrompt[]
+  >([]);
   const [dockerSudoPasswordRequest, setDockerSudoPasswordRequest] =
     useState<DockerSudoPasswordRequest | null>(null);
+  const [rdpCertificateRequests, setRdpCertificateRequests] = useState<
+    RdpCertificateVerifyRequest[]
+  >([]);
   const lastCloudConflictRevisionRef = useRef<string | null>(null);
   const modalChildWindowCount = useModalChildWindows();
 
   // Idle auto-lock
   useIdleLock(
-    appSettings.security.enable_screen_lock ? appSettings.security.idle_lock_minutes : 0,
+    appSettings.security.enable_screen_lock
+      ? appSettings.security.idle_lock_minutes
+      : 0,
     isLocked,
     () => setIsLocked(true),
   );
@@ -621,20 +689,24 @@ function App() {
     unsubs.push(
       listen<OtpRequest>("otp-request", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
-        setSecurityPromptQueue((current) => upsertSecurityPrompt(current, {
-          kind: "otp",
-          request: event.payload,
-        }));
+        setSecurityPromptQueue((current) =>
+          upsertSecurityPrompt(current, {
+            kind: "otp",
+            request: event.payload,
+          }),
+        );
       }),
     );
 
     unsubs.push(
       listen<SshAuthRequest>("ssh-auth-request", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
-        setSecurityPromptQueue((current) => upsertSecurityPrompt(current, {
-          kind: "ssh-auth",
-          request: event.payload,
-        }));
+        setSecurityPromptQueue((current) =>
+          upsertSecurityPrompt(current, {
+            kind: "ssh-auth",
+            request: event.payload,
+          }),
+        );
       }),
     );
 
@@ -642,7 +714,10 @@ function App() {
       listen<SshAgentAuthRequest>("ssh-agent-auth-pending", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
         setSecurityPromptQueue((current) =>
-          upsertSecurityPrompt(current, { kind: "ssh-agent", request: event.payload }),
+          upsertSecurityPrompt(current, {
+            kind: "ssh-agent",
+            request: event.payload,
+          }),
         );
       }),
     );
@@ -650,45 +725,74 @@ function App() {
       listen<SshAgentAuthRequest>("ssh-agent-auth-failed", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
         setSecurityPromptQueue((current) =>
-          upsertSecurityPrompt(current, { kind: "ssh-agent", request: event.payload }),
+          upsertSecurityPrompt(current, {
+            kind: "ssh-agent",
+            request: event.payload,
+          }),
         );
       }),
     );
     unsubs.push(
       listen<{ requestId: string }>("ssh-agent-auth-resolved", (event) => {
         setSecurityPromptQueue((current) =>
-          current.filter((item) => item.request.requestId !== event.payload.requestId),
+          current.filter(
+            (item) => item.request.requestId !== event.payload.requestId,
+          ),
         );
       }),
     );
     unsubs.push(
       listen<{ requestId: string }>("host-key-verify-resolved", (event) => {
         setSecurityPromptQueue((current) =>
-          current.filter((item) => item.request.requestId !== event.payload.requestId),
+          current.filter(
+            (item) => item.request.requestId !== event.payload.requestId,
+          ),
         );
       }),
     );
     unsubs.push(
       listen<{ requestId: string }>("security-prompt-resolved", (event) => {
         setSecurityPromptQueue((current) =>
-          current.filter((item) => item.request.requestId !== event.payload.requestId),
+          current.filter(
+            (item) => item.request.requestId !== event.payload.requestId,
+          ),
         );
       }),
     );
 
     unsubs.push(
-      listen<DockerSudoPasswordRequest>("docker-sudo-password-request", (event) => {
-        if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
-        setDockerSudoPasswordRequest(event.payload);
-      }),
+      listen<DockerSudoPasswordRequest>(
+        "docker-sudo-password-request",
+        (event) => {
+          if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel))
+            return;
+          setDockerSudoPasswordRequest(event.payload);
+        },
+      ),
     );
 
     unsubs.push(
       listen<HostKeyVerifyRequest>("host-key-verify", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
         setSecurityPromptQueue((current) =>
-          upsertSecurityPrompt(current, { kind: "host-key", request: event.payload }),
+          upsertSecurityPrompt(current, {
+            kind: "host-key",
+            request: event.payload,
+          }),
         );
+      }),
+    );
+
+    unsubs.push(
+      listen<RdpCertificateVerifyRequest>("rdp-certificate-verify", (event) => {
+        if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
+        setRdpCertificateRequests((current) => {
+          if (
+            current.some((item) => item.requestId === event.payload.requestId)
+          )
+            return current;
+          return [...current, event.payload];
+        });
       }),
     );
 
@@ -733,7 +837,9 @@ function App() {
         } = event.payload;
         if (!eventTargetsCurrentWindow(targetWindowLabel)) return;
         try {
-          const conns = await invoke<SavedConnection[]>("get_saved_connections");
+          const conns = await invoke<SavedConnection[]>(
+            "get_saved_connections",
+          );
           const conn = conns.find((c) => c.id === connectionId);
           const connName = conn?.name ?? connectionId;
           const sessionType = getConnectionSessionType(conn);
@@ -742,7 +848,9 @@ function App() {
             : null;
           const sourcePane =
             sourceTab &&
-            ((sourcePaneId ? findSessionPaneById(sourceTab.root, sourcePaneId) : null) ??
+            ((sourcePaneId
+              ? findSessionPaneById(sourceTab.root, sourcePaneId)
+              : null) ??
               getActivePane(sourceTab));
           let tabId: string;
           let paneId: string | undefined;
@@ -757,6 +865,7 @@ function App() {
               name: connName,
               type: sessionType,
               connectionId,
+              display: getRdpPaneDisplay(conn),
             });
           } else {
             const pending = addPendingTab(
@@ -765,6 +874,7 @@ function App() {
               connectionId,
               undefined,
               anchorTabId ? { afterTabId: anchorTabId } : undefined,
+              { display: getRdpPaneDisplay(conn) },
             );
             tabId = pending.tabId;
             createRequestId = pending.createRequestId;
@@ -797,6 +907,12 @@ function App() {
                 break;
               case "serial":
                 sessionId = await invoke<string>("create_serial_session", {
+                  connectionId,
+                  createRequestId,
+                });
+                break;
+              case "rdp":
+                sessionId = await invoke<string>("create_rdp_session", {
                   connectionId,
                   createRequestId,
                 });
@@ -869,17 +985,20 @@ function App() {
   ]);
 
   useEffect(() => {
-    const unlisten = listen<CloudConflictPreview | null>("cloud-sync-conflict", (event) => {
-      const conflict = event.payload;
-      if (!conflict) return;
-      if (lastCloudConflictRevisionRef.current === conflict.remote_revision) {
-        return;
-      }
+    const unlisten = listen<CloudConflictPreview | null>(
+      "cloud-sync-conflict",
+      (event) => {
+        const conflict = event.payload;
+        if (!conflict) return;
+        if (lastCloudConflictRevisionRef.current === conflict.remote_revision) {
+          return;
+        }
 
-      lastCloudConflictRevisionRef.current = conflict.remote_revision;
-      toast.error(conflict.message);
-      handleOpenPanel("syncBackupHistory");
-    });
+        lastCloudConflictRevisionRef.current = conflict.remote_revision;
+        toast.error(conflict.message);
+        handleOpenPanel("syncBackupHistory");
+      },
+    );
 
     return () => {
       unlisten.then((dispose) => dispose());
@@ -891,10 +1010,13 @@ function App() {
   const windowTitle = activeTabName ? `${activeTabName} - NyaTerm` : "NyaTerm";
   const activePane = activeTab ? getActivePane(activeTab) : null;
   const activeConnection = activePane?.connectionId
-    ? (savedConnections.find((connection) => connection.id === activePane.connectionId) ?? null)
+    ? (savedConnections.find(
+        (connection) => connection.id === activePane.connectionId,
+      ) ?? null)
     : null;
   const [aiIntent, setAiIntent] = useState<AIOpenIntent | null>(null);
-  const [terminalWindows, setTerminalWindows] = useState<TerminalWindowNode | null>(null);
+  const [terminalWindows, setTerminalWindows] =
+    useState<TerminalWindowNode | null>(null);
   const previousActiveTabIdRef = useRef<string | null>(null);
   const terminalWindowsRef = useRef<TerminalWindowNode | null>(null);
   const terminalWindowsRestoredRef = useRef(false);
@@ -905,7 +1027,10 @@ function App() {
     JSON.stringify(uiConfig.terminal_window_layout ?? null),
   );
   const tabsRef = useRef(tabs);
-  const tabsById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabs]);
+  const tabsById = useMemo(
+    () => new Map(tabs.map((tab) => [tab.id, tab])),
+    [tabs],
+  );
   const savedSshConnectionIdBySessionId = useMemo(() => {
     const sshConnectionIds = new Set(
       savedConnections
@@ -936,7 +1061,12 @@ function App() {
       const connectionId = savedSshConnectionIdBySessionId.get(sessionId);
       if (!connectionId) return;
 
-      recordAssetMonitoringPatch(assetMonitoringCacheRef.current, sessionId, connectionId, patch);
+      recordAssetMonitoringPatch(
+        assetMonitoringCacheRef.current,
+        sessionId,
+        connectionId,
+        patch,
+      );
     },
     [savedSshConnectionIdBySessionId],
   );
@@ -1021,7 +1151,11 @@ function App() {
   }, []);
 
   const handleEditConnection = useCallback(
-    (conn: SavedConnection, autoConnect?: boolean, target?: NewSessionTarget) => {
+    (
+      conn: SavedConnection,
+      autoConnect?: boolean,
+      target?: NewSessionTarget,
+    ) => {
       openNewSession(conn.id, autoConnect, target);
     },
     [],
@@ -1034,7 +1168,9 @@ function App() {
       target?: Pick<NewSessionTarget, "sourceTabId" | "sourcePaneId">,
     ) => {
       if (!connectionId) return;
-      const connection = savedConnections.find((item) => item.id === connectionId);
+      const connection = savedConnections.find(
+        (item) => item.id === connectionId,
+      );
       if (shouldPromptConnectionEditOnFailure(connection, errorMessage)) {
         openNewSession(connectionId, true, target);
       }
@@ -1043,16 +1179,25 @@ function App() {
   );
 
   const connectSavedConnection = useCallback(
-    async (connection: SavedConnection, options?: { failureContext?: string }) => {
+    async (
+      connection: SavedConnection,
+      options?: { failureContext?: string },
+    ) => {
       const pending = addPendingTab(
         connection.name,
         getConnectionSessionType(connection),
         connection.id,
+        undefined,
+        undefined,
+        { display: getRdpPaneDisplay(connection) },
       );
       const { tabId, createRequestId } = pending;
 
       try {
-        const sessionId = await createSessionForConnection(connection, createRequestId);
+        const sessionId = await createSessionForConnection(
+          connection,
+          createRequestId,
+        );
         if (!hasTab(tabId)) {
           await closeStaleCreatedSession(sessionId);
           return;
@@ -1074,8 +1219,12 @@ function App() {
           error,
         });
         markTabConnectionFailed(tabId, errorMessage);
-        maybePromptConnectionEdit(connection.id, errorMessage, { sourceTabId: tabId });
-        toast.error(t("savedConnections.connectionFailed", { error: errorMessage }));
+        maybePromptConnectionEdit(connection.id, errorMessage, {
+          sourceTabId: tabId,
+        });
+        toast.error(
+          t("savedConnections.connectionFailed", { error: errorMessage }),
+        );
       }
     },
     [
@@ -1092,7 +1241,10 @@ function App() {
 
   const connectTemporaryConnection = useCallback(
     async (config: TemporaryLinkConfig) => {
-      const pending = addPendingTab(config.name, getTemporaryLinkSessionType(config));
+      const pending = addPendingTab(
+        config.name,
+        getTemporaryLinkSessionType(config),
+      );
       const { tabId, createRequestId } = pending;
 
       try {
@@ -1115,14 +1267,18 @@ function App() {
           error,
         });
         markTabConnectionFailed(tabId, errorMessage);
-        toast.error(t("savedConnections.connectionFailed", { error: errorMessage }));
+        toast.error(
+          t("savedConnections.connectionFailed", { error: errorMessage }),
+        );
       }
     },
     [addPendingTab, hasTab, markTabConnectionFailed, t, updateTabSession],
   );
 
   const chooseExternalConnection = useCallback(
-    (resolution: Extract<ExternalConnectionResolution, { kind: "ambiguous" }>) =>
+    (
+      resolution: Extract<ExternalConnectionResolution, { kind: "ambiguous" }>,
+    ) =>
       new Promise<ExternalConnectionChoice>((resolve) => {
         setExternalMatchDialog({
           connections: resolution.connections,
@@ -1133,14 +1289,18 @@ function App() {
     [],
   );
 
-  const confirmExternalPostLogin = useCallback((connection: SavedConnection) => {
-    const command = connection.post_login?.command?.trim() ?? "";
-    if (!connection.post_login?.enabled || !command) return Promise.resolve(true);
+  const confirmExternalPostLogin = useCallback(
+    (connection: SavedConnection) => {
+      const command = connection.post_login?.command?.trim() ?? "";
+      if (!connection.post_login?.enabled || !command)
+        return Promise.resolve(true);
 
-    return new Promise<boolean>((resolve) => {
-      setPostLoginConfirm({ connection, command, resolve });
-    });
-  }, []);
+      return new Promise<boolean>((resolve) => {
+        setPostLoginConfirm({ connection, command, resolve });
+      });
+    },
+    [],
+  );
 
   const handleExternalOpenRequest = useCallback(
     async (request: ExternalOpenRequest) => {
@@ -1173,8 +1333,13 @@ function App() {
         return;
       }
 
-      const latestConnections = await invoke<SavedConnection[]>("get_saved_connections");
-      const resolution = findExternalConnectionMatches(latestConnections, parsed.intent);
+      const latestConnections = await invoke<SavedConnection[]>(
+        "get_saved_connections",
+      );
+      const resolution = findExternalConnectionMatches(
+        latestConnections,
+        parsed.intent,
+      );
 
       if (resolution.kind === "saved") {
         logger.info({
@@ -1255,7 +1420,11 @@ function App() {
 
   const persistTerminalWindowLayout = useCallback(
     (layout: TerminalWindowNode | null, nextTabs: Tab[] = tabsRef.current) => {
-      if (!settingsLoaded || !startupRestoreComplete || !appSettings.general.startup_restore)
+      if (
+        !settingsLoaded ||
+        !startupRestoreComplete ||
+        !appSettings.general.startup_restore
+      )
         return;
       const terminalWindowLayout =
         appSettings.general.startup_restore_window_layout === false
@@ -1288,7 +1457,8 @@ function App() {
 
     setTerminalWindows((current) => {
       let next = current;
-      let preserveRestoredLeafActiveTabs = preserveRestoredLeafActiveTabsRef.current;
+      let preserveRestoredLeafActiveTabs =
+        preserveRestoredLeafActiveTabsRef.current;
 
       if (!terminalWindowsRestoredRef.current) {
         terminalWindowsRestoredRef.current = true;
@@ -1297,7 +1467,10 @@ function App() {
           appSettings.general.startup_restore_window_layout !== false &&
           tabs.length > 0
         ) {
-          const restored = restoreTerminalWindowLayout(uiConfig.terminal_window_layout, tabs);
+          const restored = restoreTerminalWindowLayout(
+            uiConfig.terminal_window_layout,
+            tabs,
+          );
           if (restored) {
             next = restored;
             preserveRestoredLeafActiveTabs = true;
@@ -1335,20 +1508,31 @@ function App() {
     if (!terminalWindowsHydratedRef.current) return;
     if (tabs.length > 0 && !terminalWindows) return;
     persistTerminalWindowLayout(terminalWindows, tabs);
-  }, [persistTerminalWindowLayout, settingsLoaded, startupRestoreComplete, tabs, terminalWindows]);
+  }, [
+    persistTerminalWindowLayout,
+    settingsLoaded,
+    startupRestoreComplete,
+    tabs,
+    terminalWindows,
+  ]);
 
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<AIOpenIntent>).detail;
       if (!detail) return;
       setAiIntent(detail);
-      updateUi((prev) => buildPanelOpenUpdate(prev, "aiAssistant", multiPanelOpen, "right"));
+      updateUi((prev) =>
+        buildPanelOpenUpdate(prev, "aiAssistant", multiPanelOpen, "right"),
+      );
     };
     window.addEventListener(AI_OPEN_EVENT, handler);
     return () => window.removeEventListener(AI_OPEN_EVENT, handler);
   }, [multiPanelOpen, updateUi]);
 
-  const { unreadTabIds, disconnectedTabIds } = useTabStatusIndicators(tabs, activeTabId);
+  const { unreadTabIds, disconnectedTabIds } = useTabStatusIndicators(
+    tabs,
+    activeTabId,
+  );
 
   const handleSelectLeafTab = useCallback(
     (leafId: string, tabId: string) => {
@@ -1373,7 +1557,9 @@ function App() {
       openNewSessionWithTarget(undefined, undefined, {
         targetLeafId: leafId,
         anchorTabId:
-          targetLeaf?.activeTabId ?? targetLeaf?.tabIds[targetLeaf.tabIds.length - 1] ?? null,
+          targetLeaf?.activeTabId ??
+          targetLeaf?.tabIds[targetLeaf.tabIds.length - 1] ??
+          null,
       });
     },
     [handleSelectLeafTab, terminalWindows],
@@ -1385,7 +1571,9 @@ function App() {
         ? findTerminalWindowLeafById(terminalWindows, leafId)
         : null;
       const anchorTabId =
-        targetLeaf?.activeTabId ?? targetLeaf?.tabIds[targetLeaf.tabIds.length - 1] ?? null;
+        targetLeaf?.activeTabId ??
+        targetLeaf?.tabIds[targetLeaf.tabIds.length - 1] ??
+        null;
 
       if (targetLeaf?.activeTabId) {
         handleSelectLeafTab(leafId, targetLeaf.activeTabId);
@@ -1412,7 +1600,10 @@ function App() {
       }
 
       try {
-        const sessionId = await createSessionForConnection(connection, createRequestId);
+        const sessionId = await createSessionForConnection(
+          connection,
+          createRequestId,
+        );
         if (!hasTab(tabId)) {
           await closeStaleCreatedSession(sessionId);
           return;
@@ -1433,8 +1624,12 @@ function App() {
           error,
         });
         markTabConnectionFailed(tabId, errorMessage);
-        maybePromptConnectionEdit(connection.id, errorMessage, { sourceTabId: tabId });
-        toast.error(t("savedConnections.connectionFailed", { error: errorMessage }));
+        maybePromptConnectionEdit(connection.id, errorMessage, {
+          sourceTabId: tabId,
+        });
+        toast.error(
+          t("savedConnections.connectionFailed", { error: errorMessage }),
+        );
       }
     },
     [
@@ -1451,13 +1646,16 @@ function App() {
     ],
   );
 
-  const handleReorderTabsInLeaf = useCallback((_: string, fromTabId: string, toIndex: number) => {
-    preserveRestoredLeafActiveTabsRef.current = false;
-    restoredGlobalActiveTabIdRef.current = null;
-    setTerminalWindows((current) =>
-      current ? reorderTabsInLeaf(current, fromTabId, toIndex) : current,
-    );
-  }, []);
+  const handleReorderTabsInLeaf = useCallback(
+    (_: string, fromTabId: string, toIndex: number) => {
+      preserveRestoredLeafActiveTabsRef.current = false;
+      restoredGlobalActiveTabIdRef.current = null;
+      setTerminalWindows((current) =>
+        current ? reorderTabsInLeaf(current, fromTabId, toIndex) : current,
+      );
+    },
+    [],
+  );
 
   const handleMoveTabToLeaf = useCallback(
     (fromTabId: string, targetLeafId: string, toIndex: number) => {
@@ -1465,7 +1663,12 @@ function App() {
       restoredGlobalActiveTabIdRef.current = null;
       setTerminalWindows((current) => {
         if (!current) return current;
-        const next = moveTabBetweenLeaves(current, fromTabId, targetLeafId, toIndex);
+        const next = moveTabBetweenLeaves(
+          current,
+          fromTabId,
+          targetLeafId,
+          toIndex,
+        );
         return next ?? current;
       });
       setActiveTabId(fromTabId);
@@ -1477,12 +1680,21 @@ function App() {
   );
 
   const handleSplitTabToLeaf = useCallback(
-    (fromTabId: string, targetLeafId: string, direction: SplitEdgeDirection) => {
+    (
+      fromTabId: string,
+      targetLeafId: string,
+      direction: SplitEdgeDirection,
+    ) => {
       preserveRestoredLeafActiveTabsRef.current = false;
       restoredGlobalActiveTabIdRef.current = null;
       setTerminalWindows((current) => {
         if (!current) return current;
-        const next = splitLeafWithTab(current, fromTabId, targetLeafId, direction);
+        const next = splitLeafWithTab(
+          current,
+          fromTabId,
+          targetLeafId,
+          direction,
+        );
         return next ?? current;
       });
       setActiveTabId(fromTabId);
@@ -1505,11 +1717,16 @@ function App() {
     });
   }, [activeTabId]);
 
-  const handleUpdateWindowSplitRatio = useCallback((splitId: string, ratio: number) => {
-    setTerminalWindows((current) =>
-      current ? updateTerminalWindowSplitRatio(current, splitId, ratio) : current,
-    );
-  }, []);
+  const handleUpdateWindowSplitRatio = useCallback(
+    (splitId: string, ratio: number) => {
+      setTerminalWindows((current) =>
+        current
+          ? updateTerminalWindowSplitRatio(current, splitId, ratio)
+          : current,
+      );
+    },
+    [],
+  );
 
   const handleActivatePane = useCallback(
     (tabId: string, paneId: string) => {
@@ -1541,14 +1758,16 @@ function App() {
             createRequestId,
           });
         case "Telnet":
-          if (!pane.connectionId) throw new Error("Missing Telnet connection id");
+          if (!pane.connectionId)
+            throw new Error("Missing Telnet connection id");
           return invoke<string>("create_telnet_session", {
             connectionId: pane.connectionId,
             createRequestId,
             startupCommand: buildStartupCommandPayload(startupCommand),
           });
         case "Serial":
-          if (!pane.connectionId) throw new Error("Missing Serial connection id");
+          if (!pane.connectionId)
+            throw new Error("Missing Serial connection id");
           return invoke<string>("create_serial_session", {
             connectionId: pane.connectionId,
             createRequestId,
@@ -1580,12 +1799,16 @@ function App() {
     ) => {
       if (pane.connecting) {
         if (pane.type === "RDP") {
-          await invoke("close_rdp_session", { sessionId: pane.sessionId }).catch(() => {});
+          await invoke("close_rdp_session", {
+            sessionId: pane.sessionId,
+          }).catch(() => {});
           return true;
         }
         if (pane.createRequestId) {
           try {
-            await invoke("cancel_session_creation", { createRequestId: pane.createRequestId });
+            await invoke("cancel_session_creation", {
+              createRequestId: pane.createRequestId,
+            });
           } catch (error) {
             logger.error({
               domain: "session.lifecycle",
@@ -1631,7 +1854,9 @@ function App() {
   const closeWorkspaceTabSessions = useCallback(
     async (tab: Tab) => {
       const results = await Promise.all(
-        collectSessionPanes(tab.root).map((pane) => closePaneBackendSession(pane)),
+        collectSessionPanes(tab.root).map((pane) =>
+          closePaneBackendSession(pane),
+        ),
       );
       return results.every(Boolean);
     },
@@ -1676,7 +1901,13 @@ function App() {
       closeTabs([tab.id]);
       await persistWorkspaceNow(t("tabCtx.closeFailed"));
     },
-    [closeTabs, closeWorkspaceTabSessions, notifyLockedTabCloseBlocked, persistWorkspaceNow, t],
+    [
+      closeTabs,
+      closeWorkspaceTabSessions,
+      notifyLockedTabCloseBlocked,
+      persistWorkspaceNow,
+      t,
+    ],
   );
 
   const handleCloseDisconnectedPane = useCallback(
@@ -1698,7 +1929,14 @@ function App() {
       closePane(tab.id, pane.id);
       await persistWorkspaceNow(t("tabCtx.closeFailed"));
     },
-    [closePane, closePaneBackendSession, notifyLockedTabCloseBlocked, persistWorkspaceNow, t, tabs],
+    [
+      closePane,
+      closePaneBackendSession,
+      notifyLockedTabCloseBlocked,
+      persistWorkspaceNow,
+      t,
+      tabs,
+    ],
   );
 
   const handleSessionClick = useCallback(
@@ -1707,8 +1945,12 @@ function App() {
       const pane = tab ? findPaneBySessionId(tab, sessionId) : null;
       if (tab && pane) {
         setTerminalWindows((current) => {
-          const leaf = current ? findTerminalWindowLeafByTabId(current, tab.id) : null;
-          return current && leaf ? setLeafActiveTab(current, leaf.id, tab.id) : current;
+          const leaf = current
+            ? findTerminalWindowLeafByTabId(current, tab.id)
+            : null;
+          return current && leaf
+            ? setLeafActiveTab(current, leaf.id, tab.id)
+            : current;
         });
         setActiveTabId(tab.id);
         setActivePane(tab.id, pane.id);
@@ -1719,7 +1961,12 @@ function App() {
 
   const getQuickCommandPeerSessionIds = useCallback(
     (sessionId: string) => {
-      return getSessionInputPeerIds(sessionId, syncGroups, tabs, broadcastToAll);
+      return getSessionInputPeerIds(
+        sessionId,
+        syncGroups,
+        tabs,
+        broadcastToAll,
+      );
     },
     [broadcastToAll, syncGroups, tabs],
   );
@@ -1755,10 +2002,13 @@ function App() {
       const data = buildTerminalCommandInput(command, execute);
       for (const tab of tabs) {
         for (const pane of collectSessionPanes(tab.root)) {
-          if (!hasLiveSession(pane) || !isNonSerialSessionType(pane.type)) continue;
+          if (!hasLiveSession(pane) || !isNonSerialSessionType(pane.type))
+            continue;
           const { sessionId } = pane;
           void sendSessionInput(sessionId, data, {
-            preview: execute ? { kind: "reset" } : { kind: "data", data: command },
+            preview: execute
+              ? { kind: "reset" }
+              : { kind: "data", data: command },
             registerSubmission: execute ? command : null,
           }).catch(() => {});
         }
@@ -1845,7 +2095,8 @@ function App() {
   const handleSwitchTab = useCallback(
     (index: number) => {
       const tabIds = getActiveLeafTabIds();
-      const targetTabId = index === -1 ? tabIds[tabIds.length - 1] : tabIds[index];
+      const targetTabId =
+        index === -1 ? tabIds[tabIds.length - 1] : tabIds[index];
       if (targetTabId) setActiveTabId(targetTabId);
     },
     [getActiveLeafTabIds, setActiveTabId],
@@ -1854,11 +2105,17 @@ function App() {
   const handleToggleLeftSidebar = useCallback(() => {
     updateUi((prev) => {
       if (multiPanelOpen) {
-        if ((prev.left_open_panels?.length ?? 0) > 0 || prev.active_left_panel) {
+        if (
+          (prev.left_open_panels?.length ?? 0) > 0 ||
+          prev.active_left_panel
+        ) {
           return { left_open_panels: [], active_left_panel: null };
         }
         const first = getVisibleActivityIds(
-          [...prev.activity_bar_layout.left_top, ...prev.activity_bar_layout.left_bottom],
+          [
+            ...prev.activity_bar_layout.left_top,
+            ...prev.activity_bar_layout.left_bottom,
+          ],
           prev,
         ).find((id) => !NON_PANEL_IDS.has(id));
         if (!first) return {};
@@ -1868,7 +2125,10 @@ function App() {
       }
       if (prev.active_left_panel) return { active_left_panel: null };
       const first = getVisibleActivityIds(
-        [...prev.activity_bar_layout.left_top, ...prev.activity_bar_layout.left_bottom],
+        [
+          ...prev.activity_bar_layout.left_top,
+          ...prev.activity_bar_layout.left_bottom,
+        ],
         prev,
       ).find((id) => !NON_PANEL_IDS.has(id));
       return { active_left_panel: first ?? null };
@@ -1878,11 +2138,17 @@ function App() {
   const handleToggleRightSidebar = useCallback(() => {
     updateUi((prev) => {
       if (multiPanelOpen) {
-        if ((prev.right_open_panels?.length ?? 0) > 0 || prev.active_right_panel) {
+        if (
+          (prev.right_open_panels?.length ?? 0) > 0 ||
+          prev.active_right_panel
+        ) {
           return { right_open_panels: [], active_right_panel: null };
         }
         const first = getVisibleActivityIds(
-          [...prev.activity_bar_layout.right_top, ...prev.activity_bar_layout.right_bottom],
+          [
+            ...prev.activity_bar_layout.right_top,
+            ...prev.activity_bar_layout.right_bottom,
+          ],
           prev,
         ).find((id) => !NON_PANEL_IDS.has(id));
         if (!first) return {};
@@ -1892,7 +2158,10 @@ function App() {
       }
       if (prev.active_right_panel) return { active_right_panel: null };
       const first = getVisibleActivityIds(
-        [...prev.activity_bar_layout.right_top, ...prev.activity_bar_layout.right_bottom],
+        [
+          ...prev.activity_bar_layout.right_top,
+          ...prev.activity_bar_layout.right_bottom,
+        ],
         prev,
       ).find((id) => !NON_PANEL_IDS.has(id));
       return { active_right_panel: first ?? null };
@@ -1916,7 +2185,11 @@ function App() {
   }, [appSettings.security.enable_screen_lock, setIsLocked]);
 
   const persistWorkspaceLayoutNow = useCallback(async () => {
-    if (!settingsLoaded || !startupRestoreComplete || !terminalWindowsRestoredRef.current) {
+    if (
+      !settingsLoaded ||
+      !startupRestoreComplete ||
+      !terminalWindowsRestoredRef.current
+    ) {
       await persistTabsNow();
       return;
     }
@@ -1924,8 +2197,13 @@ function App() {
     const terminalWindowLayout =
       appSettings.general.startup_restore_window_layout === false
         ? null
-        : serializeTerminalWindowLayout(terminalWindowsRef.current, tabsRef.current);
-    lastPersistedTerminalWindowLayoutKeyRef.current = JSON.stringify(terminalWindowLayout ?? null);
+        : serializeTerminalWindowLayout(
+            terminalWindowsRef.current,
+            tabsRef.current,
+          );
+    lastPersistedTerminalWindowLayoutKeyRef.current = JSON.stringify(
+      terminalWindowLayout ?? null,
+    );
     await persistTabsNow({ terminal_window_layout: terminalWindowLayout });
   }, [
     appSettings.general.startup_restore_window_layout,
@@ -1995,7 +2273,11 @@ function App() {
     return () => {
       unlistenCloseRequested?.();
     };
-  }, [appSettings.general.minimize_to_tray, persistWorkspaceLayoutNow, settingsLoaded]);
+  }, [
+    appSettings.general.minimize_to_tray,
+    persistWorkspaceLayoutNow,
+    settingsLoaded,
+  ]);
 
   const handleRequestQuit = useCallback(() => {
     if (tabs.length > 0 && appSettings.general.confirm_on_close !== false) {
@@ -2004,7 +2286,11 @@ function App() {
     }
 
     handleQuitApplication();
-  }, [appSettings.general.confirm_on_close, handleQuitApplication, tabs.length]);
+  }, [
+    appSettings.general.confirm_on_close,
+    handleQuitApplication,
+    tabs.length,
+  ]);
 
   const handleRequestWindowClose = useCallback(() => {
     if (
@@ -2032,12 +2318,20 @@ function App() {
           allowProgrammaticWindowCloseRef.current = false;
         }, 1000);
       });
-  }, [appSettings.general.confirm_on_close, appSettings.general.minimize_to_tray, tabs.length]);
+  }, [
+    appSettings.general.confirm_on_close,
+    appSettings.general.minimize_to_tray,
+    tabs.length,
+  ]);
 
   useEffect(() => {
     const unlisten = listen<TrayAction>("tray-action", ({ payload }) => {
       if (!eventTargetsCurrentWindow(payload.targetWindowLabel)) return;
-      if (isLocked && payload.type !== "lock_screen" && payload.type !== "request_quit") {
+      if (
+        isLocked &&
+        payload.type !== "lock_screen" &&
+        payload.type !== "request_quit"
+      ) {
         return;
       }
 
@@ -2096,26 +2390,35 @@ function App() {
         );
         const { tabId, createRequestId } = pending;
         setTerminalWindows((current) =>
-          current ? insertTabAfterInLeaf(current, tab.id, tabId, tabId) : current,
+          current
+            ? insertTabAfterInLeaf(current, tab.id, tabId, tabId)
+            : current,
         );
         try {
-          const sessionId = await createSessionForPane(pane, createRequestId, startupCommand);
+          const sessionId = await createSessionForPane(
+            pane,
+            createRequestId,
+            startupCommand,
+          );
           if (!hasTab(tabId)) {
             await closeStaleCreatedSession(sessionId);
             return;
           }
           updateTabSession(tabId, sessionId);
           if (startupCommand && pane.type !== "SSH" && pane.type !== "Telnet") {
-            void sendStartupCommandToSession(sessionId, startupCommand).catch((error) => {
-              logger.error({
-                domain: "session.lifecycle",
-                event: "session.startup_command_failed",
-                message: "Failed to send startup command to duplicated session",
-                ids: { session_id: sessionId },
-                error,
-              });
-              toast.error(t("tabCtx.duplicateFailed"));
-            });
+            void sendStartupCommandToSession(sessionId, startupCommand).catch(
+              (error) => {
+                logger.error({
+                  domain: "session.lifecycle",
+                  event: "session.startup_command_failed",
+                  message:
+                    "Failed to send startup command to duplicated session",
+                  ids: { session_id: sessionId },
+                  error,
+                });
+                toast.error(t("tabCtx.duplicateFailed"));
+              },
+            );
           }
           if (pane.connectionId) {
             recordRecentConnection(pane.connectionId);
@@ -2130,11 +2433,15 @@ function App() {
             domain: "session.lifecycle",
             event: "session.duplicate_failed",
             message: "Failed to duplicate session",
-            ids: pane.connectionId ? { connection_id: pane.connectionId } : undefined,
+            ids: pane.connectionId
+              ? { connection_id: pane.connectionId }
+              : undefined,
             error,
           });
           markTabConnectionFailed(tabId, errorMessage);
-          maybePromptConnectionEdit(pane.connectionId, errorMessage, { sourceTabId: tabId });
+          maybePromptConnectionEdit(pane.connectionId, errorMessage, {
+            sourceTabId: tabId,
+          });
           toast.error(t("tabCtx.duplicateFailed"));
         }
       } catch (error) {
@@ -2163,7 +2470,8 @@ function App() {
   const handleMultiplexSshSession = useCallback(
     async (tab: Tab, startupCommand?: StartupCommandRequest) => {
       const pane = getActivePane(tab);
-      if (!pane || pane.type !== "SSH" || pane.connecting || pane.connectError) return;
+      if (!pane || pane.type !== "SSH" || pane.connecting || pane.connectError)
+        return;
 
       let tabId: string | undefined;
 
@@ -2177,13 +2485,18 @@ function App() {
         );
         tabId = pending.tabId;
         setTerminalWindows((current) =>
-          current && tabId ? insertTabAfterInLeaf(current, tab.id, tabId, tabId) : current,
+          current && tabId
+            ? insertTabAfterInLeaf(current, tab.id, tabId, tabId)
+            : current,
         );
 
-        const sessionId = await invoke<string>("create_multiplexed_ssh_session", {
-          sourceSessionId: pane.sessionId,
-          startupCommand: buildStartupCommandPayload(startupCommand),
-        });
+        const sessionId = await invoke<string>(
+          "create_multiplexed_ssh_session",
+          {
+            sourceSessionId: pane.sessionId,
+            startupCommand: buildStartupCommandPayload(startupCommand),
+          },
+        );
         if (!hasTab(tabId)) {
           await closeStaleCreatedSession(sessionId);
           return;
@@ -2316,7 +2629,9 @@ function App() {
           domain: "session.lifecycle",
           event: "session.reconnect_failed",
           message: "Failed to reconnect session",
-          ids: pane.connectionId ? { connection_id: pane.connectionId } : undefined,
+          ids: pane.connectionId
+            ? { connection_id: pane.connectionId }
+            : undefined,
           error,
         });
         maybePromptConnectionEdit(pane.connectionId, errorMessage, {
@@ -2358,7 +2673,8 @@ function App() {
     async (sessionId: string) => {
       const tab = findTabBySessionId(tabs, sessionId);
       const pane = tab ? findPaneBySessionId(tab, sessionId) : null;
-      if (!tab || !pane || pane.connecting || !canCreateSessionFromPane(pane)) return;
+      if (!tab || !pane || pane.connecting || !canCreateSessionFromPane(pane))
+        return;
 
       toast.info(t("tabCtx.reconnecting"));
 
@@ -2400,7 +2716,9 @@ function App() {
           domain: "session.lifecycle",
           event: "session.reconnect_failed",
           message: "Failed to reconnect session from active sessions panel",
-          ids: pane.connectionId ? { connection_id: pane.connectionId } : undefined,
+          ids: pane.connectionId
+            ? { connection_id: pane.connectionId }
+            : undefined,
           error,
         });
         maybePromptConnectionEdit(pane.connectionId, errorMessage, {
@@ -2427,7 +2745,9 @@ function App() {
     async (tab: Tab, direction: PaneSplitDirection) => {
       const pane = getActivePane(tab);
       if (!pane || !canCreateSessionFromPane(pane)) return;
-      const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, tab.id) : null;
+      const leaf = terminalWindows
+        ? findTerminalWindowLeafByTabId(terminalWindows, tab.id)
+        : null;
       if (!leaf) {
         toast.error(t("tabCtx.splitFailed"));
         return;
@@ -2435,7 +2755,9 @@ function App() {
 
       if (leaf.tabIds.length > 1) {
         setTerminalWindows((current) =>
-          current ? splitTerminalWindowForTab(current, tab.id, direction) : current,
+          current
+            ? splitTerminalWindowForTab(current, tab.id, direction)
+            : current,
         );
         setActiveTabId(tab.id);
         window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
@@ -2454,9 +2776,14 @@ function App() {
         );
         newTabId = pending.tabId;
         setTerminalWindows((current) =>
-          current ? splitTerminalWindowForTab(current, tab.id, direction, newTabId) : current,
+          current
+            ? splitTerminalWindowForTab(current, tab.id, direction, newTabId)
+            : current,
         );
-        const sessionId = await createSessionForPane(pane, pending.createRequestId);
+        const sessionId = await createSessionForPane(
+          pane,
+          pending.createRequestId,
+        );
         if (newTabId) {
           if (!hasTab(newTabId)) {
             await closeStaleCreatedSession(sessionId);
@@ -2470,7 +2797,10 @@ function App() {
         }
         window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
       } catch (error) {
-        if ((newTabId && !hasTab(newTabId)) || isSessionCreationCancelled(error)) {
+        if (
+          (newTabId && !hasTab(newTabId)) ||
+          isSessionCreationCancelled(error)
+        ) {
           return;
         }
         const errorMessage = getErrorMessage(error);
@@ -2478,7 +2808,9 @@ function App() {
           domain: "session.lifecycle",
           event: "session.split_failed",
           message: "Failed to create split session",
-          ids: pane.connectionId ? { connection_id: pane.connectionId } : undefined,
+          ids: pane.connectionId
+            ? { connection_id: pane.connectionId }
+            : undefined,
           error,
         });
         if (newTabId) {
@@ -2525,7 +2857,8 @@ function App() {
     async (tabId: string, paneId: string) => {
       const tab = tabs.find((item) => item.id === tabId);
       const pane = tab
-        ? (collectSessionPanes(tab.root).find((item) => item.id === paneId) ?? null)
+        ? (collectSessionPanes(tab.root).find((item) => item.id === paneId) ??
+          null)
         : null;
       if (!pane || pane.connecting || !canCreateSessionFromPane(pane)) return;
 
@@ -2566,7 +2899,9 @@ function App() {
           domain: "session.lifecycle",
           event: "session.reconnect_failed",
           message: "Failed to reconnect pane",
-          ids: pane.connectionId ? { connection_id: pane.connectionId } : undefined,
+          ids: pane.connectionId
+            ? { connection_id: pane.connectionId }
+            : undefined,
           error,
         });
         if (pane.connectError) {
@@ -2610,7 +2945,13 @@ function App() {
       closePane(tab.id, pane.id);
       await persistWorkspaceNow(t("tabCtx.closeFailed"));
     },
-    [closePane, closePaneBackendSession, notifyLockedTabCloseBlocked, persistWorkspaceNow, t],
+    [
+      closePane,
+      closePaneBackendSession,
+      notifyLockedTabCloseBlocked,
+      persistWorkspaceNow,
+      t,
+    ],
   );
 
   const handleDisconnectSessionById = useCallback(
@@ -2660,8 +3001,12 @@ function App() {
   const handleCloseAllTabs = useCallback(async () => {
     const tabsToClose = tabs.filter((tab) => !tab.locked);
     const skippedLockedCount = tabs.length - tabsToClose.length;
-    const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
-    const successfulTabIds = tabsToClose.filter((_, index) => results[index]).map((tab) => tab.id);
+    const results = await Promise.all(
+      tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)),
+    );
+    const successfulTabIds = tabsToClose
+      .filter((_, index) => results[index])
+      .map((tab) => tab.id);
 
     if (successfulTabIds.length > 0) {
       closeTabs(successfulTabIds);
@@ -2688,7 +3033,9 @@ function App() {
       );
       const tabsToClose = targetTabsToClose.filter((tab) => !tab.locked);
       const skippedLockedCount = targetTabsToClose.length - tabsToClose.length;
-      const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
+      const results = await Promise.all(
+        tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)),
+      );
 
       const successfulTabIds = tabsToClose
         .filter((_, index) => results[index])
@@ -2725,16 +3072,22 @@ function App() {
 
   const handleCloseRightTabs = useCallback(
     async (tabId: string) => {
-      const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, tabId) : null;
+      const leaf = terminalWindows
+        ? findTerminalWindowLeafByTabId(terminalWindows, tabId)
+        : null;
       const tabOrder = leaf?.tabIds ?? tabs.map((tab) => tab.id);
       const idx = tabOrder.indexOf(tabId);
       if (idx === -1) return;
 
       const rightTabIds = tabOrder.slice(idx + 1);
-      const targetTabsToClose = tabs.filter((tab) => rightTabIds.includes(tab.id));
+      const targetTabsToClose = tabs.filter((tab) =>
+        rightTabIds.includes(tab.id),
+      );
       const tabsToClose = targetTabsToClose.filter((tab) => !tab.locked);
       const skippedLockedCount = targetTabsToClose.length - tabsToClose.length;
-      const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
+      const results = await Promise.all(
+        tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)),
+      );
 
       const successfulTabIds = tabsToClose
         .filter((_, index) => results[index])
@@ -2753,7 +3106,14 @@ function App() {
         toast.error(t("tabCtx.closeFailed"));
       }
     },
-    [closeTabs, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs, terminalWindows],
+    [
+      closeTabs,
+      closeWorkspaceTabSessions,
+      persistWorkspaceNow,
+      t,
+      tabs,
+      terminalWindows,
+    ],
   );
 
   const handleSessionInfo = useCallback((tab: Tab) => {
@@ -2765,7 +3125,9 @@ function App() {
 
   const handleOpenChat = useCallback(() => {
     if (!isLocked) {
-      updateUi((prev) => buildPanelOpenUpdate(prev, "aiAssistant", multiPanelOpen, "right"));
+      updateUi((prev) =>
+        buildPanelOpenUpdate(prev, "aiAssistant", multiPanelOpen, "right"),
+      );
     }
   }, [isLocked, multiPanelOpen, updateUi]);
 
@@ -2773,7 +3135,9 @@ function App() {
     if (!isLocked) {
       updateUi((prev) => ({
         show_quick_cmd_bar: !prev.show_quick_cmd_bar,
-        ...(prev.show_serial_send_panel ? { show_serial_send_panel: false } : {}),
+        ...(prev.show_serial_send_panel
+          ? { show_serial_send_panel: false }
+          : {}),
       }));
     }
   }, [isLocked, updateUi]);
@@ -2821,7 +3185,8 @@ function App() {
       onShowAllCommands: handleShowAllCommands,
       onLockScreen: handleLockScreen,
       onManageSyncGroups: () => setShowSyncGroupDialog(true),
-      onClearTerminal: () => window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
+      onClearTerminal: () =>
+        window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
     },
     appSettings.keybindings,
   );
@@ -2829,8 +3194,14 @@ function App() {
   const buildRecordingFilePath = useCallback(
     async (prefix: "recording" | "session", sessionName: string) => {
       const dir = appSettings.recording.base_path || (await downloadDir());
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      return joinPath(dir, `${prefix}-${safeRecordingName(sessionName)}-${timestamp}.log`);
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .slice(0, 19);
+      return joinPath(
+        dir,
+        `${prefix}-${safeRecordingName(sessionName)}-${timestamp}.log`,
+      );
     },
     [appSettings.recording.base_path],
   );
@@ -2842,7 +3213,9 @@ function App() {
 
       if (isActive) {
         try {
-          const savedPath = await invoke<string>("stop_recording", { sessionId });
+          const savedPath = await invoke<string>("stop_recording", {
+            sessionId,
+          });
           await refreshRecordingStatuses();
           toast.success(t("recording.saved", { path: savedPath }));
         } catch (error) {
@@ -2916,7 +3289,10 @@ function App() {
   const handleLeftResize = useCallback(
     (delta: number) => {
       updateUi((prev) => ({
-        left_width: Math.max(160, Math.min(720, (prev.left_width || 256) + delta)),
+        left_width: Math.max(
+          160,
+          Math.min(720, (prev.left_width || 256) + delta),
+        ),
       }));
     },
     [updateUi],
@@ -2925,7 +3301,10 @@ function App() {
   const handleRightResize = useCallback(
     (delta: number) => {
       updateUi((prev) => ({
-        right_width: Math.max(200, Math.min(720, (prev.right_width || 288) - delta)),
+        right_width: Math.max(
+          200,
+          Math.min(720, (prev.right_width || 288) - delta),
+        ),
       }));
     },
     [updateUi],
@@ -2934,7 +3313,10 @@ function App() {
   const handleQuickCmdResize = useCallback(
     (delta: number) => {
       updateUi((prev) => ({
-        quick_cmd_height: Math.max(36, Math.min(520, (prev.quick_cmd_height || 180) - delta)),
+        quick_cmd_height: Math.max(
+          36,
+          Math.min(520, (prev.quick_cmd_height || 180) - delta),
+        ),
       }));
     },
     [updateUi],
@@ -2943,7 +3325,10 @@ function App() {
   const handleSerialSendResize = useCallback(
     (delta: number) => {
       updateUi((prev) => ({
-        serial_send_height: Math.max(60, Math.min(520, (prev.serial_send_height || 180) - delta)),
+        serial_send_height: Math.max(
+          60,
+          Math.min(520, (prev.serial_send_height || 180) - delta),
+        ),
       }));
     },
     [updateUi],
@@ -2972,65 +3357,95 @@ function App() {
   // --- Panel content rendering (side-independent) ---
 
   const activeSessionId =
-    activePane && !activePane.connecting && !activePane.connectError ? activePane.sessionId : null;
+    activePane && !activePane.connecting && !activePane.connectError
+      ? activePane.sessionId
+      : null;
   const activeSshSessionId =
-    activePane && !activePane.connecting && !activePane.connectError && activePane.type === "SSH"
+    activePane &&
+    !activePane.connecting &&
+    !activePane.connectError &&
+    activePane.type === "SSH"
       ? activePane.sessionId
       : null;
   const activeLiveSshSessionId =
-    activeSshSessionId && (liveSessionIds === null || liveSessionIds.has(activeSshSessionId))
+    activeSshSessionId &&
+    (liveSessionIds === null || liveSessionIds.has(activeSshSessionId))
       ? activeSshSessionId
       : null;
+  const activeLiveSshSessionInfo = activeLiveSshSessionId
+    ? liveSessionsById?.get(activeLiveSshSessionId)
+    : null;
+  const activeStatsSessionId =
+    activeLiveSshSessionId &&
+    (activeLiveSshSessionInfo?.remote_stats_enabled ?? true)
+      ? activeLiveSshSessionId
+      : null;
+  const activeRemoteStatsEnabled =
+    remoteStatsEnabled && Boolean(activeStatsSessionId);
   const remoteStats = useRemoteStats(
     activeLiveSshSessionId,
-    remoteStatsEnabled,
+    activeRemoteStatsEnabled,
     uiConfig.remote_stats_interval ?? 3,
   );
-  const headerStatusMode = normalizeHeaderStatusMode(uiConfig.header_status_mode);
+  const headerStatusMode = normalizeHeaderStatusMode(
+    uiConfig.header_status_mode,
+  );
   const headerStatusVisible = uiConfig.header_status_visible !== false;
   const gpuOverviewEnabled =
-    (uiConfig.show_gpu_monitor ?? false) || (headerStatusVisible && headerStatusMode === "gpu");
+    (uiConfig.show_gpu_monitor ?? false) ||
+    (headerStatusVisible && headerStatusMode === "gpu");
   const npuOverviewEnabled =
     (uiConfig.show_ascend_npu_monitor ?? false) ||
     (headerStatusVisible && headerStatusMode === "npu");
   const gpuOverviewState = useRemoteGpuOverview(
     activeLiveSshSessionId,
-    gpuOverviewEnabled,
+    gpuOverviewEnabled && Boolean(activeStatsSessionId),
     uiConfig.gpu_monitor_interval ?? 3,
   );
   const npuOverviewState = useRemoteNpuOverview(
     activeLiveSshSessionId,
-    npuOverviewEnabled,
+    npuOverviewEnabled && Boolean(activeStatsSessionId),
     uiConfig.ascend_npu_monitor_interval ?? 3,
   );
 
   useEffect(() => {
-    if (!activeLiveSshSessionId || !remoteStats.stats) return;
+    if (!activeStatsSessionId || !remoteStats.stats) return;
 
     const patch = buildAssetPatchFromRemoteStats(remoteStats.stats);
     if (patch) {
-      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+      handleAssetMonitoringPatch(activeStatsSessionId, patch);
     }
-  }, [activeLiveSshSessionId, handleAssetMonitoringPatch, remoteStats.stats]);
+  }, [activeStatsSessionId, handleAssetMonitoringPatch, remoteStats.stats]);
   useEffect(() => {
-    if (!activeLiveSshSessionId || !gpuOverviewState.overview) return;
+    if (!activeStatsSessionId || !gpuOverviewState.overview) return;
 
     const patch = buildAssetPatchFromGpuOverview(gpuOverviewState.overview);
     if (patch) {
-      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+      handleAssetMonitoringPatch(activeStatsSessionId, patch);
     }
-  }, [activeLiveSshSessionId, gpuOverviewState.overview, handleAssetMonitoringPatch]);
+  }, [
+    activeStatsSessionId,
+    gpuOverviewState.overview,
+    handleAssetMonitoringPatch,
+  ]);
   useEffect(() => {
-    if (!activeLiveSshSessionId || !npuOverviewState.overview) return;
+    if (!activeStatsSessionId || !npuOverviewState.overview) return;
 
     const patch = buildAssetPatchFromNpuOverview(npuOverviewState.overview);
     if (patch) {
-      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+      handleAssetMonitoringPatch(activeStatsSessionId, patch);
     }
-  }, [activeLiveSshSessionId, handleAssetMonitoringPatch, npuOverviewState.overview]);
+  }, [
+    activeStatsSessionId,
+    handleAssetMonitoringPatch,
+    npuOverviewState.overview,
+  ]);
 
   const activeSerialSessionId =
-    activePane && !activePane.connecting && !activePane.connectError && activePane.type === "Serial"
+    activePane &&
+    !activePane.connecting &&
+    !activePane.connectError &&
+    activePane.type === "Serial"
       ? activePane.sessionId
       : null;
   const activeNonSerialSessionId =
@@ -3047,7 +3462,12 @@ function App() {
   const sendCommandSessionTargets = useMemo(() => {
     if (!terminalWindows) return [];
 
-    const targets: { id: string; name: string; tabName: string; type: SessionType }[] = [];
+    const targets: {
+      id: string;
+      name: string;
+      tabName: string;
+      type: SessionType;
+    }[] = [];
     const seen = new Set<string>();
 
     const visit = (node: TerminalWindowNode) => {
@@ -3062,7 +3482,11 @@ function App() {
         if (!tab) continue;
 
         for (const pane of collectSessionPanes(tab.root)) {
-          if (pane.paneKind !== "terminal" || !hasLiveSession(pane) || seen.has(pane.sessionId)) {
+          if (
+            pane.paneKind !== "terminal" ||
+            !hasLiveSession(pane) ||
+            seen.has(pane.sessionId)
+          ) {
             continue;
           }
           seen.add(pane.sessionId);
@@ -3085,10 +3509,22 @@ function App() {
     : uiConfig.show_quick_cmd_bar
       ? "quickCmdBar"
       : null;
-  const temporarySshShortcut = resolveDisplayKeys("tab.temporarySshLink", appSettings.keybindings);
-  const openChatShortcut = resolveDisplayKeys("view.openChat", appSettings.keybindings);
-  const showCommandsShortcut = resolveDisplayKeys("view.showAllCommands", appSettings.keybindings);
-  const switchTerminalShortcut = resolveDisplayKeys("tab.quickSwitch", appSettings.keybindings);
+  const temporarySshShortcut = resolveDisplayKeys(
+    "tab.temporarySshLink",
+    appSettings.keybindings,
+  );
+  const openChatShortcut = resolveDisplayKeys(
+    "view.openChat",
+    appSettings.keybindings,
+  );
+  const showCommandsShortcut = resolveDisplayKeys(
+    "view.showAllCommands",
+    appSettings.keybindings,
+  );
+  const switchTerminalShortcut = resolveDisplayKeys(
+    "tab.quickSwitch",
+    appSettings.keybindings,
+  );
 
   const quickSwitcherSessions = useMemo<QuickSwitcherSession[]>(() => {
     const connectionsById = new Map(
@@ -3098,7 +3534,9 @@ function App() {
     for (const tab of tabs) {
       for (const pane of collectSessionPanes(tab.root)) {
         if (pane.paneKind !== "terminal") continue;
-        const connection = pane.connectionId ? connectionsById.get(pane.connectionId) : undefined;
+        const connection = pane.connectionId
+          ? connectionsById.get(pane.connectionId)
+          : undefined;
         sessions.push({
           id: pane.sessionId,
           name: pane.name,
@@ -3145,7 +3583,10 @@ function App() {
   const handleTransferResize = useCallback(
     (delta: number) => {
       updateUi((prev) => ({
-        transfer_height: Math.max(60, Math.min(600, (prev.transfer_height || 180) - delta)),
+        transfer_height: Math.max(
+          60,
+          Math.min(600, (prev.transfer_height || 180) - delta),
+        ),
       }));
     },
     [updateUi],
@@ -3206,7 +3647,10 @@ function App() {
       updateUi((prev) => {
         const openIds = getSideOpenPanels(prev, side, true);
         const sizes = prev.panel_stack_sizes ?? {};
-        const totalWeight = openIds.reduce((sum, id) => sum + (sizes[id] ?? 1), 0);
+        const totalWeight = openIds.reduce(
+          (sum, id) => sum + (sizes[id] ?? 1),
+          0,
+        );
         if (containerHeight <= 0 || totalWeight <= 0 || delta === 0) return {};
         const pxPerWeight = containerHeight / totalWeight;
         const aboveWeight = sizes[aboveId] ?? 1;
@@ -3237,7 +3681,7 @@ function App() {
         activeConnection={activeConnection}
         activeSessionId={activeSessionId}
         activeSshSessionId={activeLiveSshSessionId}
-        remoteStatsEnabled={remoteStatsEnabled}
+        remoteStatsEnabled={activeRemoteStatsEnabled}
         remoteStats={remoteStats}
         gpuMonitorEnabled={uiConfig.show_gpu_monitor ?? false}
         gpuOverviewState={gpuOverviewState}
@@ -3266,9 +3710,9 @@ function App() {
       activePane,
       activeSessionId,
       aiIntent,
+      activeRemoteStatsEnabled,
       canReconnectSessionById,
       remoteStats,
-      remoteStatsEnabled,
       gpuOverviewState,
       npuOverviewState,
       handleSaveSessionTranscript,
@@ -3297,19 +3741,25 @@ function App() {
     });
   }, []);
 
-  const handleExternalMatchConnection = useCallback((connection: SavedConnection) => {
-    setExternalMatchDialog((current) => {
-      current?.resolve({ kind: "saved", connection });
-      return null;
-    });
-  }, []);
+  const handleExternalMatchConnection = useCallback(
+    (connection: SavedConnection) => {
+      setExternalMatchDialog((current) => {
+        current?.resolve({ kind: "saved", connection });
+        return null;
+      });
+    },
+    [],
+  );
 
-  const handleExternalMatchTemporary = useCallback((config: TemporaryLinkConfig) => {
-    setExternalMatchDialog((current) => {
-      current?.resolve({ kind: "temporary", config });
-      return null;
-    });
-  }, []);
+  const handleExternalMatchTemporary = useCallback(
+    (config: TemporaryLinkConfig) => {
+      setExternalMatchDialog((current) => {
+        current?.resolve({ kind: "temporary", config });
+        return null;
+      });
+    },
+    [],
+  );
 
   const handlePostLoginConfirmOpenChange = useCallback((open: boolean) => {
     if (open) return;
@@ -3328,12 +3778,19 @@ function App() {
 
   const activeSecurityPrompt = securityPromptQueue[0] ?? null;
   const activeHostKeyRequest =
-    activeSecurityPrompt?.kind === "host-key" ? activeSecurityPrompt.request : null;
+    activeSecurityPrompt?.kind === "host-key"
+      ? activeSecurityPrompt.request
+      : null;
   const activeSshAgentRequest =
-    activeSecurityPrompt?.kind === "ssh-agent" ? activeSecurityPrompt.request : null;
-  const activeOtpRequest = activeSecurityPrompt?.kind === "otp" ? activeSecurityPrompt.request : null;
+    activeSecurityPrompt?.kind === "ssh-agent"
+      ? activeSecurityPrompt.request
+      : null;
+  const activeOtpRequest =
+    activeSecurityPrompt?.kind === "otp" ? activeSecurityPrompt.request : null;
   const activeSshAuthRequest =
-    activeSecurityPrompt?.kind === "ssh-auth" ? activeSecurityPrompt.request : null;
+    activeSecurityPrompt?.kind === "ssh-auth"
+      ? activeSecurityPrompt.request
+      : null;
   const removeSecurityPrompt = (requestId: string) => {
     setSecurityPromptQueue((current) =>
       current.filter((item) => item.request.requestId !== requestId),
@@ -3355,7 +3812,7 @@ function App() {
           onHelpMenuOpen: () => setHelpDotVisible(false),
           activeTab,
           savedConnections,
-          remoteStatsEnabled,
+          remoteStatsEnabled: activeRemoteStatsEnabled,
           remoteStats,
           gpuOverviewState,
           npuOverviewState,
@@ -3366,7 +3823,8 @@ function App() {
           onBroadcastToAll: () => setBroadcastToAll((prev) => !prev),
           broadcastToAll,
           onOpenCommandPalette: handleOpenSessionSwitcher,
-          onClearTerminal: () => window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
+          onClearTerminal: () =>
+            window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
           onRefitTerminals: () =>
             window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals")),
           locked: isLocked,
@@ -3424,7 +3882,8 @@ function App() {
           onDuplicateSession: handleDuplicateSession,
           onMultiplexSshSession: handleMultiplexSshSession,
           onDuplicateSessionWithCommand: handleDuplicateSessionWithCommand,
-          onMultiplexSshSessionWithCommand: handleMultiplexSshSessionWithCommand,
+          onMultiplexSshSessionWithCommand:
+            handleMultiplexSshSessionWithCommand,
           onReconnectSession: handleReconnectSession,
           onDisconnectSession: handleDisconnectSession,
           onSplitSession: handleSplitSession,
@@ -3498,6 +3957,11 @@ function App() {
             ),
           hostKeyVerifyRequest: activeHostKeyRequest,
           onHostKeyVerifyDone: removeSecurityPrompt,
+          rdpCertificateVerifyRequest: rdpCertificateRequests[0] ?? null,
+          onRdpCertificateVerifyDone: (requestId) =>
+            setRdpCertificateRequests((current) =>
+              current.filter((item) => item.requestId !== requestId),
+            ),
           modalChildWindowCount,
           locked: isLocked,
           hasMasterPassword: !!appSettings.security.master_password,
@@ -3529,10 +3993,15 @@ function App() {
         onSelectConnection={handleExternalMatchConnection}
         onUseTemporary={handleExternalMatchTemporary}
       />
-      <AlertDialog open={postLoginConfirm !== null} onOpenChange={handlePostLoginConfirmOpenChange}>
+      <AlertDialog
+        open={postLoginConfirm !== null}
+        onOpenChange={handlePostLoginConfirmOpenChange}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("externalOpen.postLoginConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("externalOpen.postLoginConfirmTitle")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {t("externalOpen.postLoginConfirmDescription", {
                 name: postLoginConfirm?.connection.name ?? "",
