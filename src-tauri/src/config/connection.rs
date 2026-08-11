@@ -46,6 +46,29 @@ pub struct SshAlgorithmPreferences {
     pub host_keys: Vec<String>,
 }
 
+/// Source used to connect to the local SSH Agent.
+///
+/// `Auto` selects the platform default: Unix uses `SSH_AUTH_SOCK`, while
+/// Windows tries the OpenSSH Agent named pipe followed by Pageant.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SshAgentEndpoint {
+    #[default]
+    Auto,
+    Environment {
+        variable: String,
+    },
+    UnixSocket {
+        path: String,
+    },
+    Pageant,
+    WindowsOpenSsh,
+}
+
+fn is_default_ssh_agent_endpoint(value: &SshAgentEndpoint) -> bool {
+    matches!(value, SshAgentEndpoint::Auto)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SftpCwdFollowMode {
@@ -187,6 +210,10 @@ pub enum ConnectionType {
         backspace_mode: String,
         #[serde(default, skip_serializing_if = "is_false")]
         x11_forwarding: bool,
+        #[serde(default, skip_serializing_if = "is_default_ssh_agent_endpoint")]
+        agent_endpoint: SshAgentEndpoint,
+        #[serde(default, skip_serializing_if = "is_false")]
+        agent_forwarding: bool,
         #[serde(default)]
         encoding: String,
     },
@@ -849,9 +876,9 @@ pub fn save_config(app: &AppHandle, config: &AppConfig) -> AppResult<()> {
 mod tests {
     use super::{
         AssetAcceleratorType, AssetDeviceType, AssetDiskKind, AssetDiskPurpose, ConnectionType,
-        SavedConnection, SftpCwdFollowMode, SftpSettings, SshAlgorithmMode, SshProfile,
-        SshTerminalType, effective_cwd_follow_mode, effective_cwd_follow_mode_for_profile,
-        resolve_ssh_terminal_type,
+        SavedConnection, SftpCwdFollowMode, SftpSettings, SshAgentEndpoint, SshAlgorithmMode,
+        SshProfile, SshTerminalType, effective_cwd_follow_mode,
+        effective_cwd_follow_mode_for_profile, resolve_ssh_terminal_type,
     };
 
     #[test]
@@ -885,6 +912,38 @@ mod tests {
         assert!(matches!(connection.config, ConnectionType::Ssh { .. }));
         assert!(connection.ssh_algorithms.is_none());
         assert_eq!(SshAlgorithmMode::default(), SshAlgorithmMode::Compatible);
+    }
+
+    #[test]
+    fn ssh_agent_forwarding_is_opt_in_and_endpoint_is_preserved() {
+        let connection: SavedConnection = serde_json::from_value(serde_json::json!({
+            "id": "conn-1",
+            "name": "Agent",
+            "type": "ssh",
+            "host": "example.com",
+            "agent_endpoint": {
+                "type": "unix_socket",
+                "path": "/tmp/agent.sock"
+            }
+        }))
+        .expect("connection");
+
+        let ConnectionType::Ssh {
+            agent_endpoint,
+            agent_forwarding,
+            ..
+        } = connection.config
+        else {
+            panic!("expected ssh connection");
+        };
+
+        assert_eq!(
+            agent_endpoint,
+            SshAgentEndpoint::UnixSocket {
+                path: "/tmp/agent.sock".to_string()
+            }
+        );
+        assert!(!agent_forwarding);
     }
 
     #[test]

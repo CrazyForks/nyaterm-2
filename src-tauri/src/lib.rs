@@ -25,7 +25,8 @@ use crate::core::ai::AgentApprovalManager;
 use crate::core::monitoring::stats::RemoteStatsSampler;
 use crate::core::sftp::TransferDuplicateManager;
 use crate::core::ssh::{
-    HostKeyVerifyManager, PendingAuthManager, PendingSshAuthManager, TunnelManager,
+    HostKeyVerifyManager, PendingAuthManager, PendingSshAgentAuthManager, PendingSshAuthManager,
+    TunnelManager,
 };
 use crate::core::{
     CloudSyncManager, QuickCommandsStore, RdpSessionManager, RecordingManager, SessionManager,
@@ -43,6 +44,7 @@ pub fn run() {
     let recording_manager = Arc::new(RecordingManager::new());
     let pending_auth_manager = Arc::new(PendingAuthManager::new());
     let pending_ssh_auth_manager = Arc::new(PendingSshAuthManager::new());
+    let pending_ssh_agent_auth_manager = Arc::new(PendingSshAgentAuthManager::new());
     let host_key_verify_manager = Arc::new(HostKeyVerifyManager::new());
     let quick_commands_store = Arc::new(QuickCommandsStore::new());
     let cloud_sync_manager = Arc::new(CloudSyncManager::new());
@@ -91,6 +93,7 @@ pub fn run() {
         .manage(recording_manager.clone())
         .manage(pending_auth_manager.clone())
         .manage(pending_ssh_auth_manager.clone())
+        .manage(pending_ssh_agent_auth_manager.clone())
         .manage(host_key_verify_manager.clone())
         .manage(quick_commands_store.clone())
         .manage(cloud_sync_manager.clone())
@@ -224,6 +227,8 @@ pub fn run() {
             cmd::session::cancel_otp_request,
             cmd::session::submit_ssh_auth_response,
             cmd::session::cancel_ssh_auth_request,
+            cmd::session::respond_ssh_agent_auth,
+            cmd::session::cancel_ssh_agent_auth,
             cmd::session::respond_host_key_verify,
             cmd::session::zmodem_accept_download,
             cmd::session::zmodem_accept_upload,

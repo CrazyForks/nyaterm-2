@@ -294,6 +294,7 @@ pub(super) async fn open_shell_channel(
     handle: &mut client::Handle<SshHandler>,
     session_id: &str,
     x11_fake_cookie_hex: Option<&str>,
+    agent_forwarding: bool,
     terminal_type: &str,
     sftp_enabled: bool,
     network_device_profile: bool,
@@ -336,6 +337,15 @@ pub(super) async fn open_shell_channel(
     };
 
     let mut local_notice = None;
+    if agent_forwarding {
+        if let Err(error) = channel.agent_forward(false).await {
+            tracing::warn!(
+                session_id = %session_id,
+                %error,
+                "Could not enable SSH Agent forwarding"
+            );
+        }
+    }
     if let Some(fake_cookie_hex) = x11_fake_cookie_hex {
         if let Err(error) = channel
             .request_x11(true, false, "MIT-MAGIC-COOKIE-1", fake_cookie_hex, 0)

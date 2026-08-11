@@ -1,7 +1,8 @@
 use crate::config;
 use crate::core::monitoring::stats::RemoteStatsSampler;
 use crate::core::ssh::{
-    self, HostKeyVerifyManager, PendingAuthManager, PendingSshAuthManager, SshAuthResponse,
+    self, HostKeyVerifyManager, PendingAuthManager, PendingSshAgentAuthManager,
+    PendingSshAuthManager, SshAgentAuthAction, SshAuthResponse,
 };
 use crate::core::zmodem::ZmodemUploadConflictMode;
 use crate::core::{
@@ -123,6 +124,8 @@ fn normalize_temporary_ssh_config(mut config: ssh::SshConfig, encoding: &str) ->
     };
     config.x11_forwarding = false;
     config.x11_display = String::new();
+    config.agent_endpoint = crate::config::SshAgentEndpoint::Auto;
+    config.agent_forwarding = false;
     config.proxy = None;
     config.proxy_jump = None;
     config.post_login = None;
@@ -1346,6 +1349,46 @@ pub async fn cancel_ssh_auth_request(
         client_timestamp: None,
     });
     Ok(())
+}
+
+#[tauri::command]
+pub async fn respond_ssh_agent_auth(
+    state: tauri::State<'_, Arc<PendingSshAgentAuthManager>>,
+    request_id: String,
+    action: String,
+) -> AppResult<()> {
+    let action = match action.as_str() {
+        "retry" => SshAgentAuthAction::Retry,
+        "cancel" => SshAgentAuthAction::Cancel,
+        _ => {
+            return Err(AppError::Config(
+                "Unknown SSH Agent auth action".to_string(),
+            ));
+        }
+    };
+    if state.respond(&request_id, action).await {
+        Ok(())
+    } else {
+        Err(AppError::Auth(format!(
+            "No pending SSH Agent authentication request with id '{}'",
+            request_id
+        )))
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_ssh_agent_auth(
+    state: tauri::State<'_, Arc<PendingSshAgentAuthManager>>,
+    request_id: String,
+) -> AppResult<()> {
+    if state.respond(&request_id, SshAgentAuthAction::Cancel).await {
+        Ok(())
+    } else {
+        Err(AppError::Auth(format!(
+            "No pending SSH Agent authentication request with id '{}'",
+            request_id
+        )))
+    }
 }
 
 #[tauri::command]

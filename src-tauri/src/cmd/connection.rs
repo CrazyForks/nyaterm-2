@@ -582,6 +582,8 @@ e+JpiSq66Z6GIt0801skPh20jxOO3F52SoX1IeO5D5PXfZrfSZlw6S8c7bwyp2FHxDewRx
                 username: "root".to_string(),
                 backspace_mode: "del".to_string(),
                 x11_forwarding: false,
+                agent_endpoint: crate::config::SshAgentEndpoint::Auto,
+                agent_forwarding: false,
                 encoding: String::new(),
             },
             group_id: None,

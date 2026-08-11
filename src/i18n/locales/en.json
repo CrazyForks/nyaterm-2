@@ -621,6 +621,17 @@
     "shellPowerShell": "PowerShell",
     "shellWindowsTerminal": "Windows Terminal",
     "shellWsl": "WSL",
+    "sshAgent": "SSH Agent",
+    "sshAgentAuthDesc": "Use an identity managed by the local SSH Agent.",
+    "sshAgentAuto": "Automatic",
+    "sshAgentEndpoint": "Agent endpoint",
+    "sshAgentEnvironment": "Environment variable",
+    "sshAgentForwarding": "Allow agent forwarding",
+    "sshAgentForwardingDesc": "Forward this local Agent to the remote server.",
+    "sshAgentForwardingWarning": "Agent forwarding lets remote processes use the local Agent's signing capability through SSH. Enable it only for trusted servers and keep it disabled when it is not needed. The Agent endpoint and forwarding switch are device-local connection settings; hardware keys and private keys are never synchronized to the cloud.",
+    "sshAgentPageant": "Pageant",
+    "sshAgentUnixSocket": "Unix domain socket",
+    "sshAgentWindowsOpenSsh": "Windows OpenSSH Agent",
     "sshAlgorithms": "SSH algorithms",
     "sshAlgorithmsDesc": "Controls transport negotiation order for this SSH connection.",
     "sshBackspaceModeDesc": "Controls the byte sent by Backspace in SSH sessions. Switch to Ctrl+H for network devices that do not accept the default DEL key.",
@@ -2387,6 +2398,20 @@
     "x11Display": "Local X11 DISPLAY",
     "x11DisplayDesc": "Requires a local X server. Windows can use VcXsrv/Xming, macOS can use XQuartz, and Linux usually uses Xorg/Xwayland.",
     "x11DisplayPlaceholder": "Windows: localhost:0 / Linux/macOS: :0"
+  },
+  "sshAgentAuth": {
+    "endpoint": {
+      "auto": "System default Agent",
+      "environment": "Environment variable Agent",
+      "pageant": "Pageant",
+      "unix_socket": "Unix socket Agent",
+      "windows_open_ssh": "Windows OpenSSH Agent"
+    },
+    "failedDescription": "The SSH Agent request failed.",
+    "failedTitle": "SSH Agent authentication failed",
+    "responseError": "The SSH Agent request is no longer available.",
+    "waitingDescription": "Confirm the hardware key, enter its PIN, or approve the request in your SSH Agent.",
+    "waitingTitle": "SSH Agent requires confirmation"
   },
   "sshAuth": {
     "addKey": "Add SSH key",
