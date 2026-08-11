@@ -904,6 +904,7 @@
     "search": "검색",
     "searchChildDirectories": "하위 디렉터리 검색...",
     "searchPlaceholder": "폴더 검색...",
+    "selectedItems": "{{selected}}/{{total}}개 항목",
     "sendDirPathToTerminal": "디렉터리 경로 전송",
     "sendToPeer": "보내기",
     "sendToTerminal": "터미널에 경로 전송",
