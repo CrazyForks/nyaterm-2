@@ -82,6 +82,16 @@ When a server asks for additional keyboard-interactive input, OTP, or a restarte
 
 If an authentication request comes from an unexpected host or session, verify the connection details before entering sensitive information.
 
+### SSH profile and terminal type
+
+The SSH form includes **Profile** and **Terminal Type** settings.
+
+**Standard server** is for regular Linux / Unix shells. It keeps SFTP browsing, directory tracking, shell detection, shell integration, remote stats, and automatic icon detection available.
+
+**Network device** is for switches, routers, and other device CLIs that are not Linux shells. At runtime, NyaTerm disables SFTP browsing, directory tracking, shell detection, shell integration, remote stats, and automatic icon detection so the device CLI is not probed like a full shell. This does not rewrite your saved SFTP choices.
+
+Terminal Type controls the `$TERM` value declared to the remote SSH session. You can choose `xterm-256color`, `xterm`, `vt100`, `vt220`, `ansi`, or `linux`. If an older device renders strangely, try a more conservative terminal type.
+
 ## Advanced configuration
 
 The advanced section is where an SSH connection goes from "can connect" to "fits a real daily workflow."
@@ -273,6 +283,7 @@ Supported session types:
 - `local_terminal`
 - `telnet`
 - `serial`
+- `rdp`
 
 Supported SSH authentication forms:
 
@@ -282,7 +293,7 @@ Supported SSH authentication forms:
 - SSH Agent: `"auth": { "mode": "agent" }`
 - No authentication: `"auth": { "mode": "none" }`
 
-Use either `password` or `password_ref`, but not both. `key` mode must provide `key_ref`. A `ref` is only valid inside the current JSON file; after import, NyaTerm generates real local IDs.
+Use either `password` or `password_ref`, but not both. `key` mode must provide `key_ref`. `agent` mode does not import private keys; it uses the current device's available SSH Agent when connecting. A `ref` is only valid inside the current JSON file; after import, NyaTerm generates real local IDs.
 
 :::warning
 Passwords and private keys in the JSON file are plaintext. Delete the file after importing, or at least treat it as a sensitive file.

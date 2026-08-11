@@ -82,6 +82,16 @@ Agent endpoint 和 forwarding 开关属于设备本地连接配置。跨设备�
 
 如果某次认证请求来自未预期的主机或会话，请先核对连接信息再输入敏感内容。
 
+### 连接类型与终端类型
+
+SSH 表单提供 **连接类型** 和 **终端类型** 设置。
+
+**标准服务器** 适合普通 Linux / Unix shell，会保留 SFTP 浏览、目录跟随、Shell 检测、Shell Integration、远程资源统计和自动图标识别等能力。
+
+**网络设备** 适合交换机、路由器等非 Linux shell 的设备 CLI。选择后，NyaTerm 会在运行时关闭 SFTP 浏览、目录跟随、Shell 检测、Shell Integration、远程资源统计和自动图标识别，避免把设备 CLI 当作完整 shell 探测；这个选择不会改写已保存的 SFTP 选项。
+
+终端类型会影响 SSH 会话向远端声明的 `$TERM`，可在 `xterm-256color`、`xterm`、`vt100`、`vt220`、`ansi`、`linux` 之间选择。连接老旧设备或字符界面异常时，可以尝试更保守的终端类型。
+
 ## 高级配置
 
 SSH 表单的高级区域可以把连接从“能连上”扩展成“适合日常使用”的工作流配置。
@@ -271,15 +281,17 @@ JSON 顶层字段：
 - `local_terminal`
 - `telnet`
 - `serial`
+- `rdp`
 
 SSH 认证支持：
 
 - 直接密码：`"auth": { "mode": "password", "password": "replace-me" }`
 - 已保存密码：`"auth": { "mode": "password", "password_ref": "prod-root-password" }`
 - 已保存密钥：`"auth": { "mode": "key", "key_ref": "ops-ed25519" }`
+- SSH Agent：`"auth": { "mode": "agent" }`
 - 无认证：`"auth": { "mode": "none" }`
 
-`password` 与 `password_ref` 二选一；`key` 模式必须提供 `key_ref`。`ref` 只在当前 JSON 文件内有效，导入后 NyaTerm 会生成真实的本地 ID。
+`password` 与 `password_ref` 二选一；`key` 模式必须提供 `key_ref`。`agent` 模式不会导入私钥，只会在连接时使用当前设备可用的 SSH Agent。`ref` 只在当前 JSON 文件内有效，导入后 NyaTerm 会生成真实的本地 ID。
 
 :::warning
 JSON 文件中的密码和私钥是明文。导入后请删除该文件，或至少按敏感文件方式保存。
