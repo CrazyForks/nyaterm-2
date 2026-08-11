@@ -127,6 +127,11 @@ fn normalize_temporary_ssh_config(mut config: ssh::SshConfig, encoding: &str) ->
     config.proxy_jump = None;
     config.post_login = None;
     config.ssh_algorithms = None;
+    if config.ssh_profile == crate::config::SshProfile::NetworkDevice
+        && config.terminal_type == crate::config::SshTerminalType::Xterm256Color
+    {
+        config.terminal_type = crate::config::resolve_ssh_terminal_type(&config.ssh_profile, None);
+    }
     // Inherit encoding from global settings only when no explicit value was provided.
     if config.encoding.trim().is_empty() {
         config.encoding = encoding.to_string();
@@ -766,7 +771,7 @@ pub async fn write_to_session(
     let origin = origin.unwrap_or(InputOrigin::Keyboard);
     let sensitivity = sensitivity.unwrap_or_default();
     let automated = !matches!(origin, InputOrigin::Keyboard | InputOrigin::SyncInput);
-    state
+    let result = state
         .send_command(
             &session_id,
             SessionCommand::Write {
@@ -776,7 +781,35 @@ pub async fn write_to_session(
                 sensitivity,
             },
         )
-        .await
+        .await;
+
+    if let Err(error) = &result {
+        match error {
+            AppError::SessionNotFound(_) => {
+                tracing::warn!(
+                    session_id = %session_id,
+                    reason = "session_not_found",
+                    "Terminal input rejected because SSH session is no longer active"
+                );
+            }
+            AppError::Channel(_) => {
+                tracing::warn!(
+                    session_id = %session_id,
+                    reason = "command_channel_closed",
+                    "Terminal input rejected because SSH session is no longer active"
+                );
+            }
+            _ => {
+                tracing::warn!(
+                    session_id = %session_id,
+                    error = %error,
+                    "Terminal input rejected"
+                );
+            }
+        }
+    }
+
+    result
 }
 
 #[tauri::command]

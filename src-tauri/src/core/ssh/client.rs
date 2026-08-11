@@ -1,4 +1,6 @@
-use crate::config::{SftpSettings, SshAlgorithmMode, SshAlgorithmPreferences};
+use crate::config::{
+    SftpSettings, SshAlgorithmMode, SshAlgorithmPreferences, SshProfile, SshTerminalType,
+};
 use crate::error::{AppError, AppResult};
 use russh::client;
 use russh::keys::{Algorithm, EcdsaCurve, HashAlg, PublicKeyBase64};
@@ -7,9 +9,10 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt;
 use std::process::Stdio;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, BufReader};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
@@ -40,6 +43,10 @@ pub struct SshConfig {
     pub post_login: Option<SshPostLoginConfig>,
     #[serde(default)]
     pub ssh_algorithms: Option<SshAlgorithmPreferences>,
+    #[serde(default)]
+    pub ssh_profile: SshProfile,
+    #[serde(default)]
+    pub terminal_type: SshTerminalType,
     #[serde(default)]
     pub sftp: SftpSettings,
     /// Character encoding for terminal I/O (e.g. "UTF-8", "GBK").
@@ -228,6 +235,68 @@ struct HostKeyVerifyPayload {
     target_window_label: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SshDiagnosticStage {
+    Authenticating,
+    Authenticated,
+    OpeningInteractiveChannel,
+    RequestingPty,
+    RequestingShell,
+    DetectingShell,
+    PreparingIntegration,
+    IoRunning,
+}
+
+impl fmt::Display for SshDiagnosticStage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Authenticating => f.write_str("Authenticating"),
+            Self::Authenticated => f.write_str("Authenticated"),
+            Self::OpeningInteractiveChannel => f.write_str("OpeningInteractiveChannel"),
+            Self::RequestingPty => f.write_str("RequestingPty"),
+            Self::RequestingShell => f.write_str("RequestingShell"),
+            Self::DetectingShell => f.write_str("DetectingShell"),
+            Self::PreparingIntegration => f.write_str("PreparingIntegration"),
+            Self::IoRunning => f.write_str("IoRunning"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SshDiagnosticContext {
+    state: Arc<StdMutex<SshDiagnosticState>>,
+}
+
+#[derive(Debug)]
+struct SshDiagnosticState {
+    session_id: Option<String>,
+    stage: SshDiagnosticStage,
+}
+
+impl SshDiagnosticContext {
+    pub fn new(session_id: Option<String>) -> Self {
+        Self {
+            state: Arc::new(StdMutex::new(SshDiagnosticState {
+                session_id,
+                stage: SshDiagnosticStage::Authenticating,
+            })),
+        }
+    }
+
+    pub fn set_stage(&self, stage: SshDiagnosticStage) {
+        if let Ok(mut state) = self.state.lock() {
+            state.stage = stage;
+        }
+    }
+
+    pub fn snapshot(&self) -> (Option<String>, SshDiagnosticStage) {
+        self.state
+            .lock()
+            .map(|state| (state.session_id.clone(), state.stage))
+            .unwrap_or((None, SshDiagnosticStage::Authenticating))
+    }
+}
+
 /// russh client handler; performs TOFU known_hosts verification.
 pub struct SshHandler {
     app: AppHandle,
@@ -237,6 +306,7 @@ pub struct SshHandler {
     x11_tx: Option<mpsc::UnboundedSender<super::x11_forwarding::X11ChannelOpen>>,
     disconnect_tx: Option<mpsc::UnboundedSender<String>>,
     remote_forward_tx: Option<mpsc::UnboundedSender<RemoteForwardOpen>>,
+    diagnostics: Option<SshDiagnosticContext>,
 }
 
 impl SshHandler {
@@ -254,6 +324,7 @@ impl SshHandler {
             x11_tx: None,
             disconnect_tx: None,
             remote_forward_tx: None,
+            diagnostics: None,
         }
     }
 
@@ -275,6 +346,11 @@ impl SshHandler {
         remote_forward_tx: mpsc::UnboundedSender<RemoteForwardOpen>,
     ) -> Self {
         self.remote_forward_tx = Some(remote_forward_tx);
+        self
+    }
+
+    pub fn with_diagnostics(mut self, diagnostics: SshDiagnosticContext) -> Self {
+        self.diagnostics = Some(diagnostics);
         self
     }
 
@@ -798,9 +874,16 @@ impl client::Handler for SshHandler {
                 if let Some(tx) = &self.disconnect_tx {
                     let _ = tx.send(format!("SSH server disconnected: {}", info.message));
                 }
+                let (session_id, stage) = self
+                    .diagnostics
+                    .as_ref()
+                    .map(SshDiagnosticContext::snapshot)
+                    .unwrap_or((None, SshDiagnosticStage::Authenticating));
                 tracing::warn!(
                     host = %self.host,
                     port = self.port,
+                    session_id = session_id.as_deref().unwrap_or(""),
+                    stage = %stage,
                     reason_code = ?info.reason_code,
                     message = %info.message,
                     lang_tag = %info.lang_tag,
@@ -812,9 +895,16 @@ impl client::Handler for SshHandler {
                 if let Some(tx) = &self.disconnect_tx {
                     let _ = tx.send(format!("SSH connection error: {error}"));
                 }
+                let (session_id, stage) = self
+                    .diagnostics
+                    .as_ref()
+                    .map(SshDiagnosticContext::snapshot)
+                    .unwrap_or((None, SshDiagnosticStage::Authenticating));
                 tracing::error!(
                     host = %self.host,
                     port = self.port,
+                    session_id = session_id.as_deref().unwrap_or(""),
+                    stage = %stage,
                     error = ?error,
                     "SSH transport disconnected with error"
                 );

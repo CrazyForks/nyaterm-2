@@ -446,6 +446,7 @@ function App() {
     [recordingStatuses],
   );
   const [liveSessionIds, setLiveSessionIds] = useState<Set<string> | null>(null);
+  const [liveSessionsById, setLiveSessionsById] = useState<Map<string, SessionInfo> | null>(null);
   const assetMonitoringCacheRef = useRef<Map<string, AssetMonitoringCacheEntry>>(new Map());
   const assetMonitoringFlushesRef = useRef<Set<string>>(new Set());
 
@@ -485,6 +486,7 @@ function App() {
         const sessions = await invoke<SessionInfo[]>("list_sessions");
         if (!disposed) {
           setLiveSessionIds(new Set(sessions.map((session) => session.id)));
+          setLiveSessionsById(new Map(sessions.map((session) => [session.id, session])));
         }
       } catch (error) {
         logger.error({
@@ -2956,9 +2958,17 @@ function App() {
     activeSshSessionId && (liveSessionIds === null || liveSessionIds.has(activeSshSessionId))
       ? activeSshSessionId
       : null;
+  const activeLiveSshSessionInfo = activeLiveSshSessionId
+    ? liveSessionsById?.get(activeLiveSshSessionId)
+    : null;
+  const activeStatsSessionId =
+    activeLiveSshSessionId && (activeLiveSshSessionInfo?.remote_stats_enabled ?? true)
+      ? activeLiveSshSessionId
+      : null;
+  const activeRemoteStatsEnabled = remoteStatsEnabled && Boolean(activeStatsSessionId);
   const remoteStats = useRemoteStats(
     activeLiveSshSessionId,
-    remoteStatsEnabled,
+    activeRemoteStatsEnabled,
     uiConfig.remote_stats_interval ?? 3,
   );
   const headerStatusMode = normalizeHeaderStatusMode(uiConfig.header_status_mode);
@@ -2970,39 +2980,39 @@ function App() {
     (headerStatusVisible && headerStatusMode === "npu");
   const gpuOverviewState = useRemoteGpuOverview(
     activeLiveSshSessionId,
-    gpuOverviewEnabled,
+    gpuOverviewEnabled && Boolean(activeStatsSessionId),
     uiConfig.gpu_monitor_interval ?? 3,
   );
   const npuOverviewState = useRemoteNpuOverview(
     activeLiveSshSessionId,
-    npuOverviewEnabled,
+    npuOverviewEnabled && Boolean(activeStatsSessionId),
     uiConfig.ascend_npu_monitor_interval ?? 3,
   );
 
   useEffect(() => {
-    if (!activeLiveSshSessionId || !remoteStats.stats) return;
+    if (!activeStatsSessionId || !remoteStats.stats) return;
 
     const patch = buildAssetPatchFromRemoteStats(remoteStats.stats);
     if (patch) {
-      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+      handleAssetMonitoringPatch(activeStatsSessionId, patch);
     }
-  }, [activeLiveSshSessionId, handleAssetMonitoringPatch, remoteStats.stats]);
+  }, [activeStatsSessionId, handleAssetMonitoringPatch, remoteStats.stats]);
   useEffect(() => {
-    if (!activeLiveSshSessionId || !gpuOverviewState.overview) return;
+    if (!activeStatsSessionId || !gpuOverviewState.overview) return;
 
     const patch = buildAssetPatchFromGpuOverview(gpuOverviewState.overview);
     if (patch) {
-      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+      handleAssetMonitoringPatch(activeStatsSessionId, patch);
     }
-  }, [activeLiveSshSessionId, gpuOverviewState.overview, handleAssetMonitoringPatch]);
+  }, [activeStatsSessionId, gpuOverviewState.overview, handleAssetMonitoringPatch]);
   useEffect(() => {
-    if (!activeLiveSshSessionId || !npuOverviewState.overview) return;
+    if (!activeStatsSessionId || !npuOverviewState.overview) return;
 
     const patch = buildAssetPatchFromNpuOverview(npuOverviewState.overview);
     if (patch) {
-      handleAssetMonitoringPatch(activeLiveSshSessionId, patch);
+      handleAssetMonitoringPatch(activeStatsSessionId, patch);
     }
-  }, [activeLiveSshSessionId, handleAssetMonitoringPatch, npuOverviewState.overview]);
+  }, [activeStatsSessionId, handleAssetMonitoringPatch, npuOverviewState.overview]);
 
   const activeSerialSessionId =
     activePane && !activePane.connecting && !activePane.connectError && activePane.type === "Serial"
@@ -3212,7 +3222,7 @@ function App() {
         activeConnection={activeConnection}
         activeSessionId={activeSessionId}
         activeSshSessionId={activeLiveSshSessionId}
-        remoteStatsEnabled={remoteStatsEnabled}
+        remoteStatsEnabled={activeRemoteStatsEnabled}
         remoteStats={remoteStats}
         gpuMonitorEnabled={uiConfig.show_gpu_monitor ?? false}
         gpuOverviewState={gpuOverviewState}
@@ -3241,9 +3251,9 @@ function App() {
       activePane,
       activeSessionId,
       aiIntent,
+      activeRemoteStatsEnabled,
       canReconnectSessionById,
       remoteStats,
-      remoteStatsEnabled,
       gpuOverviewState,
       npuOverviewState,
       handleSaveSessionTranscript,
@@ -3316,7 +3326,7 @@ function App() {
           onHelpMenuOpen: () => setHelpDotVisible(false),
           activeTab,
           savedConnections,
-          remoteStatsEnabled,
+          remoteStatsEnabled: activeRemoteStatsEnabled,
           remoteStats,
           gpuOverviewState,
           npuOverviewState,

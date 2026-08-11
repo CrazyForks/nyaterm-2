@@ -22,13 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +41,8 @@ import type {
   SavedConnection,
   SftpSettings,
   SshAlgorithmPreferences,
+  SshProfile,
+  SshTerminalType,
 } from "@/types/global";
 
 const isValidPort = (value: number) => Number.isInteger(value) && value >= 1 && value <= 65535;
@@ -70,6 +65,7 @@ const DEFAULT_SFTP_SETTINGS: SftpSettings = {
   shell_detection_timeout_ms: DEFAULT_SFTP_SHELL_DETECTION_TIMEOUT_MS,
   filename_encoding: "",
 };
+type SshTerminalTypeSelection = SshTerminalType | "default";
 
 function normalizeSshAlgorithms(
   value: SavedConnection["ssh_algorithms"] | undefined,
@@ -173,6 +169,8 @@ export default function NewSessionPage() {
   const [x11Forwarding, setX11Forwarding] = useState(false);
   const [sshAlgorithms, setSshAlgorithms] =
     useState<SshAlgorithmPreferences>(DEFAULT_SSH_ALGORITHMS);
+  const [sshProfile, setSshProfile] = useState<SshProfile>("standard");
+  const [sshTerminalType, setSshTerminalType] = useState<SshTerminalTypeSelection>("default");
   const [sftpSettings, setSftpSettings] = useState<SftpSettings>(DEFAULT_SFTP_SETTINGS);
 
   // Serial Settings States
@@ -266,6 +264,8 @@ export default function NewSessionPage() {
           setSshBackspaceMode(found.backspace_mode || "del");
           setX11Forwarding(found.x11_forwarding ?? false);
           setSshAlgorithms(normalizeSshAlgorithms(found.ssh_algorithms));
+          setSshProfile(found.ssh_profile || "standard");
+          setSshTerminalType(found.terminal_type || "default");
           setSftpSettings(normalizeSftpSettings(found.sftp));
         } else if (found.type === "telnet") {
           setHost(found.host || "");
@@ -365,6 +365,8 @@ export default function NewSessionPage() {
     setSshBackspaceMode("del");
     setX11Forwarding(false);
     setSshAlgorithms({ ...DEFAULT_SSH_ALGORITHMS });
+    setSshProfile("standard");
+    setSshTerminalType("default");
     setSftpSettings({ ...DEFAULT_SFTP_SETTINGS });
     setSerialPortName("");
     setSerialPorts([]);
@@ -425,10 +427,13 @@ export default function NewSessionPage() {
     return buildGroupPath(groupId, groupsById) || t("dialog.none");
   }, [groupId, groupsById, newGroupNamePending, t]);
   const remoteStatsEnabled = appSettings.ui.show_remote_stats ?? true;
-  const iconAutoDetectDisabled = !remoteStatsEnabled;
+  const iconAutoDetectDisabled =
+    !remoteStatsEnabled || (currentTab === "ssh" && sshProfile === "network_device");
   const iconAutoDetectTooltip = !remoteStatsEnabled
     ? t("dialog.iconAutoDetectRemoteStatsDisabledTooltip")
-    : t("dialog.iconAutoDetectTooltip");
+    : currentTab === "ssh" && sshProfile === "network_device"
+      ? t("dialog.iconAutoDetectNetworkDeviceTooltip")
+      : t("dialog.iconAutoDetectTooltip");
 
   const newGroupParentLabel = useMemo(() => {
     if (!groupId || groupId === "new") {
@@ -751,12 +756,14 @@ export default function NewSessionPage() {
         initialData && initialGroupKey === finalGroupKey
           ? (initialData.sort_order ?? nextSortOrder)
           : nextSortOrder;
-      const recording = recordingUseGlobal
-        ? undefined
-        : {
-            auto_start: recordingAutoStart,
-            mode: recordingMode,
-          };
+      const supportsRecording = currentTab !== "rdp";
+      const recording =
+        supportsRecording && !recordingUseGlobal
+          ? {
+              auto_start: recordingAutoStart,
+              mode: recordingMode,
+            }
+          : undefined;
 
       const connection: SavedConnection = {
         id: initialData?.id || "",
@@ -778,6 +785,8 @@ export default function NewSessionPage() {
               network,
               post_login: postLogin,
               ssh_algorithms: sshAlgorithms,
+              ssh_profile: sshProfile,
+              terminal_type: sshTerminalType === "default" ? undefined : sshTerminalType,
               sftp: sftpSettings,
               backspace_mode: sshBackspaceMode,
               x11_forwarding: x11Forwarding,
@@ -1195,8 +1204,18 @@ export default function NewSessionPage() {
               setX11Forwarding={setX11Forwarding}
               sshAlgorithms={sshAlgorithms}
               setSshAlgorithms={setSshAlgorithms}
+              sshProfile={sshProfile}
+              setSshProfile={setSshProfile}
+              sshTerminalType={sshTerminalType}
+              setSshTerminalType={setSshTerminalType}
               sftpSettings={sftpSettings}
               setSftpSettings={setSftpSettings}
+              recordingUseGlobal={recordingUseGlobal}
+              setRecordingUseGlobal={setRecordingUseGlobal}
+              recordingAutoStart={recordingAutoStart}
+              setRecordingAutoStart={setRecordingAutoStart}
+              recordingMode={recordingMode}
+              setRecordingMode={setRecordingMode}
               connectionId={initialData?.id || editId}
               encoding={encoding}
               setEncoding={setEncoding}
@@ -1214,6 +1233,12 @@ export default function NewSessionPage() {
               setShellArgs={setShellArgs}
               workingDir={workingDir}
               setWorkingDir={setWorkingDir}
+              recordingUseGlobal={recordingUseGlobal}
+              setRecordingUseGlobal={setRecordingUseGlobal}
+              recordingAutoStart={recordingAutoStart}
+              setRecordingAutoStart={setRecordingAutoStart}
+              recordingMode={recordingMode}
+              setRecordingMode={setRecordingMode}
               encoding={encoding}
               setEncoding={setEncoding}
             />
@@ -1251,6 +1276,12 @@ export default function NewSessionPage() {
               setSendNaws={setTelnetSendNaws}
               sendSga={telnetSendSga}
               setSendSga={setTelnetSendSga}
+              recordingUseGlobal={recordingUseGlobal}
+              setRecordingUseGlobal={setRecordingUseGlobal}
+              recordingAutoStart={recordingAutoStart}
+              setRecordingAutoStart={setRecordingAutoStart}
+              recordingMode={recordingMode}
+              setRecordingMode={setRecordingMode}
               connectionId={initialData?.id || editId}
               encoding={encoding}
               setEncoding={setEncoding}
@@ -1280,6 +1311,12 @@ export default function NewSessionPage() {
               setStopBits={setStopBits}
               backspaceMode={serialBackspaceMode}
               setBackspaceMode={setSerialBackspaceMode}
+              recordingUseGlobal={recordingUseGlobal}
+              setRecordingUseGlobal={setRecordingUseGlobal}
+              recordingAutoStart={recordingAutoStart}
+              setRecordingAutoStart={setRecordingAutoStart}
+              recordingMode={recordingMode}
+              setRecordingMode={setRecordingMode}
               encoding={encoding}
               setEncoding={setEncoding}
             />
@@ -1335,65 +1372,6 @@ export default function NewSessionPage() {
               />
             </div>
 
-            <div className="rounded-lg border border-border/70 bg-background/60 p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <Label className="text-xs font-medium text-foreground/80">
-                    {t("dialog.connectionRecording")}
-                  </Label>
-                  <p className="mt-0.5 text-[0.6875rem] leading-snug text-muted-foreground">
-                    {t("dialog.connectionRecordingDesc")}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {t("dialog.recordingUseGlobal")}
-                  </span>
-                  <Switch
-                    size="sm"
-                    checked={recordingUseGlobal}
-                    onCheckedChange={setRecordingUseGlobal}
-                  />
-                </div>
-              </div>
-
-              {!recordingUseGlobal && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium">{t("dialog.recordingAutoStart")}</div>
-                      <div className="mt-0.5 text-[0.6875rem] text-muted-foreground">
-                        {t("dialog.recordingAutoStartDesc")}
-                      </div>
-                    </div>
-                    <Switch
-                      size="sm"
-                      checked={recordingAutoStart}
-                      onCheckedChange={setRecordingAutoStart}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-foreground/80">
-                      {t("dialog.recordingMode")}
-                    </Label>
-                    <Select
-                      value={recordingMode}
-                      onValueChange={(value) => setRecordingMode(value as RecordingMode)}
-                    >
-                      <SelectTrigger size="sm" className="h-8 w-full text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="transcript">
-                          {t("dialog.recordingModeTranscript")}
-                        </SelectItem>
-                        <SelectItem value="raw">{t("dialog.recordingModeRaw")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-            </div>
             {/* Messages */}
             {error && (
               <div className="p-2 bg-destructive/10 border border-destructive/30 rounded text-xs text-red-400">

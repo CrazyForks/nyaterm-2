@@ -2432,6 +2432,8 @@ mod tests {
             proxy_jump: None,
             post_login: None,
             ssh_algorithms: None,
+            ssh_profile: Default::default(),
+            terminal_type: Default::default(),
             sftp: SftpSettings::default(),
             encoding: "UTF-8".to_string(),
         }
@@ -2585,6 +2587,8 @@ mod tests {
                     ai_execution_profile: AiExecutionProfile::Posix,
                     injection_active: true,
                     remote_file_browser_enabled: false,
+                    remote_stats_enabled: true,
+                    ssh_profile: None,
                 },
                 cmd_tx,
                 ssh_config: None,
