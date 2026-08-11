@@ -1627,11 +1627,15 @@ export interface GithubGistDeviceFlowPoll {
 export interface CloudConflictPreview {
   detected_at_ms: number;
   provider: string;
+  kind?: "content_conflict" | "remote_inconsistent";
   local_payload_hash: string;
   remote_payload_hash: string;
   remote_revision: string;
   remote_created_at_ms: number;
   remote_device_id: string;
+  recovery_revision?: string | null;
+  recovery_payload_hash?: string | null;
+  recovery_created_at_ms?: number | null;
   message: string;
 }
 
