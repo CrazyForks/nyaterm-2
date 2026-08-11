@@ -180,6 +180,7 @@ export default function AppLayout({
   const { theme } = useTheme();
   const backgroundImagePath = appearance.background_image_path?.trim() ?? "";
   const [backgroundDataUrl, setBackgroundDataUrl] = useState("");
+  const [serialSendRunning, setSerialSendRunning] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -240,6 +241,8 @@ export default function AppLayout({
     (rightPanelIds.length > 0 || Boolean(rightOverlayPanelId));
   const leftMobileOpen = hasLeftActivityItems && mobile.leftOpen;
   const rightMobileOpen = hasRightActivityItems && mobile.rightOpen;
+  const serialSendVisible = bottomPanel.activePanel === "serialSend";
+  const serialSendMounted = serialSendVisible || serialSendRunning;
 
   useEffect(() => {
     const roots = [document.documentElement, document.body];
@@ -442,18 +445,25 @@ export default function AppLayout({
               </>
             )}
 
-            {bottomPanel.activePanel === "serialSend" && (
+            {serialSendVisible && (
+              <ResizeHandle
+                direction="vertical"
+                onResize={bottomPanel.onSerialSendResize}
+              />
+            )}
+
+            {serialSendMounted && (
               <>
-                <ResizeHandle
-                  direction="vertical"
-                  onResize={bottomPanel.onSerialSendResize}
-                />
                 <div
                   style={{
-                    height: bottomPanel.serialSendHeight,
-                    backgroundColor: "var(--df-bg-panel)",
+                    ...(serialSendVisible
+                      ? {
+                          height: bottomPanel.serialSendHeight,
+                          backgroundColor: "var(--df-bg-panel)",
+                        }
+                      : {}),
                   }}
-                  className="shrink-0 overflow-hidden"
+                  className={serialSendVisible ? "shrink-0 overflow-hidden" : "hidden"}
                 >
                   <SerialSendPanel
                     serialSessionId={bottomPanel.activeSerialSessionId}
@@ -463,6 +473,7 @@ export default function AppLayout({
                     sessionTargets={bottomPanel.sessionTargets}
                     draft={bottomPanel.sendCommandDraft}
                     onDraftConsumed={bottomPanel.onSendCommandDraftConsumed}
+                    onSendingChange={setSerialSendRunning}
                   />
                 </div>
               </>
