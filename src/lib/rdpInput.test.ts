@@ -21,6 +21,21 @@ describe("rdpInput", () => {
     });
   });
 
+  it("uses key location when webview reports a generic shift code", () => {
+    const event = new KeyboardEvent("keydown", {
+      code: "Shift",
+      key: "Shift",
+      location: KeyboardEvent.DOM_KEY_LOCATION_RIGHT,
+    });
+
+    expect(buildRdpKeyEvent(event, "key-down")).toEqual({
+      type: "key-down",
+      scanCode: 0x36,
+      extended: false,
+      repeat: false,
+    });
+  });
+
   it("maps navigation keys as extended keys", () => {
     expect(mapKeyboardCodeToRdp("Delete")).toEqual({ scanCode: 0x53, extended: true });
     expect(mapKeyboardCodeToRdp("ArrowLeft")).toEqual({ scanCode: 0x4b, extended: true });
