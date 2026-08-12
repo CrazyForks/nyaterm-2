@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { mapKeyboardCodeToRdp } from "./rdpInput";
+import { buildRdpKeyEvent, mapKeyboardCodeToRdp } from "./rdpInput";
 
 describe("rdpInput", () => {
   it("maps left and right modifiers distinctly", () => {
+    expect(mapKeyboardCodeToRdp("ShiftLeft")).toEqual({ scanCode: 0x2a });
+    expect(mapKeyboardCodeToRdp("ShiftRight")).toEqual({ scanCode: 0x36 });
     expect(mapKeyboardCodeToRdp("ControlLeft")).toEqual({ scanCode: 0x1d });
     expect(mapKeyboardCodeToRdp("ControlRight")).toEqual({ scanCode: 0x1d, extended: true });
     expect(mapKeyboardCodeToRdp("AltRight")).toEqual({ scanCode: 0x38, extended: true });
+  });
+
+  it("sends right shift as a non-extended key event", () => {
+    const event = new KeyboardEvent("keydown", { code: "ShiftRight" });
+
+    expect(buildRdpKeyEvent(event, "key-down")).toEqual({
+      type: "key-down",
+      scanCode: 0x36,
+      extended: false,
+      repeat: false,
+    });
   });
 
   it("maps navigation keys as extended keys", () => {
