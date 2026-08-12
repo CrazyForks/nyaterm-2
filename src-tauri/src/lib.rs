@@ -320,7 +320,6 @@ pub fn run() {
             cmd::stats::try_get_terminal_cwd,
             cmd::process::get_remote_processes,
             cmd::process::signal_remote_process,
-            cmd::process::renice_remote_process,
             cmd::gpu::get_remote_gpu_overview,
             cmd::ascend_npu::get_remote_ascend_npu_overview,
             cmd::docker::get_remote_docker_overview,
