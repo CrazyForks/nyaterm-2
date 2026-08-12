@@ -14,6 +14,7 @@ import {
   DEFAULT_TAB_MIDDLE_CLICK_ACTION,
   DEFAULT_TAB_RIGHT_CLICK_ACTION,
 } from "@/lib/interactionSettings";
+import { normalizeQuickCommandAppSettings } from "@/lib/quickCommandSettings";
 import type { AppRuntimeInfo, AppSettings, Group, SavedConnection, UiConfig } from "@/types/global";
 import i18n from "../i18n";
 import { invoke } from "../lib/invoke";
@@ -244,12 +245,13 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
   const loadAppSettings = useCallback(() => {
     invoke<AppSettings>("get_app_settings")
       .then((cfg) => {
-        setAppSettings(cfg);
-        setLoggerLevel(cfg.diagnostics.level);
+        const normalized = normalizeQuickCommandAppSettings(cfg);
+        setAppSettings(normalized);
+        setLoggerLevel(normalized.diagnostics.level);
         loaded.current = true;
         setSettingsLoaded(true);
-        if (cfg.ui?.language && cfg.ui.language !== i18n.language) {
-          i18n.changeLanguage(cfg.ui.language);
+        if (normalized.ui?.language && normalized.ui.language !== i18n.language) {
+          i18n.changeLanguage(normalized.ui.language);
         }
       })
       .catch(() => {
@@ -325,7 +327,10 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
     (updates: Partial<AppSettings> | ((prev: AppSettings) => Partial<AppSettings>)) => {
       setAppSettings((prev) => {
         const nextUpdates = typeof updates === "function" ? updates(prev) : updates;
-        const next = { ...prev, ...nextUpdates };
+        const next = normalizeQuickCommandAppSettings({
+          ...prev,
+          ...nextUpdates,
+        });
         setLoggerLevel(next.diagnostics.level);
         if (loaded.current) {
           if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -351,8 +356,9 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    setLoggerLevel(next.diagnostics.level);
-    setAppSettings(next);
+    const normalized = normalizeQuickCommandAppSettings(next);
+    setLoggerLevel(normalized.diagnostics.level);
+    setAppSettings(normalized);
   }, []);
 
   const updateUi = useCallback(

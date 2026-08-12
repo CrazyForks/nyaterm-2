@@ -589,7 +589,7 @@ export interface ActivityBarLayout {
 
 /** Layout preferences: panel widths, active panels, theme. */
 export type QuickCommandViewMode = "list" | "compact" | "tile";
-export type QuickCommandSortMode = "created" | "name" | "useCount";
+export type QuickCommandSortMode = "created" | "name" | "useCount" | "custom";
 export type HeaderStatusMode = "session" | "resources" | "host" | "datetime" | "gpu" | "npu";
 
 export type RestorableTerminalWindowNode =
@@ -925,6 +925,7 @@ export interface QuickCommand {
   updated_at?: number;
   created_at?: number;
   use_count?: number;
+  sort_order?: number;
 }
 
 export interface QuickCommandsConfig {
