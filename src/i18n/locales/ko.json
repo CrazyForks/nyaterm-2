@@ -2186,6 +2186,7 @@
       "switchTab": "1-9번 탭으로 전환",
       "temporarySshLink": "임시 링크",
       "toggleLeftSidebar": "왼쪽 사이드바 전환",
+      "toggleRecording": "녹화 로그 시작/중지",
       "toggleRightSidebar": "오른쪽 사이드바",
       "zoomIn": "확대",
       "zoomOut": "축소"
@@ -2649,6 +2650,8 @@
     "findSearching": "검색 중...",
     "paste": "붙여넣기",
     "pasteSelectedText": "선택한 텍스트 붙여넣기",
+    "recordingLogs": "녹화 로그",
+    "recordingSettings": "설정...",
     "searchCaseSensitive": "대소문자 구분",
     "searchCurrentBuffer": "현재 버퍼",
     "searchDeepHistory": "전체 기록",

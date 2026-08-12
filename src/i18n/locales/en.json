@@ -2187,6 +2187,7 @@
       "switchTab": "Switch to Tab 1-9",
       "temporarySshLink": "Temporary Link",
       "toggleLeftSidebar": "Toggle Left Sidebar",
+      "toggleRecording": "Start/Stop Recording Log",
       "toggleRightSidebar": "Right Sidebar",
       "zoomIn": "Zoom In",
       "zoomOut": "Zoom Out"
@@ -2658,6 +2659,8 @@
     "findSearching": "Searching...",
     "paste": "Paste",
     "pasteSelectedText": "Paste Selected Text",
+    "recordingLogs": "Recording Logs",
+    "recordingSettings": "Settings...",
     "searchCaseSensitive": "Case sensitive",
     "searchCurrentBuffer": "Current Buffer",
     "searchDeepHistory": "Deep History",

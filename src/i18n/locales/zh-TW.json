@@ -2181,6 +2181,7 @@
       "switchTab": "切換到標籤 1-9",
       "temporarySshLink": "臨時連結",
       "toggleLeftSidebar": "切換左側邊欄",
+      "toggleRecording": "開始/停止錄製日誌",
       "toggleRightSidebar": "切換右側邊欄",
       "zoomIn": "放大",
       "zoomOut": "縮小"
@@ -2652,6 +2653,8 @@
     "findSearching": "搜尋中...",
     "paste": "貼上",
     "pasteSelectedText": "貼上選取的文字",
+    "recordingLogs": "錄製日誌",
+    "recordingSettings": "設定...",
     "searchCaseSensitive": "區分大小寫",
     "searchCurrentBuffer": "目前緩衝區",
     "searchDeepHistory": "深度歷史",
