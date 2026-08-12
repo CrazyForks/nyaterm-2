@@ -905,7 +905,10 @@ async fn build_ironrdp_config(
         .with_credssp(config.use_nla)
         .with_tls(true)
         .with_autologon(true)
-        .with_compression(true)
+        // Some servers send compressed FastPath bitmap updates that IronRDP 0.17 can decode
+        // inconsistently after activation/reactivation, producing malformed 0 bpp bitmap PDUs.
+        // Do not advertise bulk compression until the full output path is stable.
+        .with_compression(false)
         .with_server_pointer(true)
         .with_client_build(client_build())
         .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
@@ -1422,7 +1425,7 @@ fn rdp_input_to_operations(event: RdpInputEvent) -> Option<Vec<IronRdpInputOpera
                 operations.push(IronRdpInputOperation::WheelRotations(
                     IronRdpWheelRotations {
                         is_vertical: false,
-                        rotation_units: clamp_f64_to_i16(delta_x),
+                        rotation_units: clamp_f64_to_i16(-delta_x),
                     },
                 ));
             }
@@ -1430,7 +1433,7 @@ fn rdp_input_to_operations(event: RdpInputEvent) -> Option<Vec<IronRdpInputOpera
                 operations.push(IronRdpInputOperation::WheelRotations(
                     IronRdpWheelRotations {
                         is_vertical: true,
-                        rotation_units: clamp_f64_to_i16(delta_y),
+                        rotation_units: clamp_f64_to_i16(-delta_y),
                     },
                 ));
             }
@@ -2033,6 +2036,43 @@ mod tests {
             }
             _ => panic!("expected mouse-wheel event"),
         }
+    }
+
+    #[test]
+    fn browser_wheel_delta_is_inverted_for_rdp_rotation_units() {
+        let operations = rdp_input_to_operations(RdpInputEvent::MouseWheel {
+            delta_x: 3.0,
+            delta_y: 120.0,
+            x: 10,
+            y: 20,
+        })
+        .unwrap();
+
+        assert!(matches!(
+            operations.first(),
+            Some(IronRdpInputOperation::MouseMove(_))
+        ));
+        let horizontal = operations
+            .iter()
+            .find_map(|operation| match operation {
+                IronRdpInputOperation::WheelRotations(rotations) if !rotations.is_vertical => {
+                    Some(rotations.rotation_units)
+                }
+                _ => None,
+            })
+            .expect("expected horizontal wheel operation");
+        let vertical = operations
+            .iter()
+            .find_map(|operation| match operation {
+                IronRdpInputOperation::WheelRotations(rotations) if rotations.is_vertical => {
+                    Some(rotations.rotation_units)
+                }
+                _ => None,
+            })
+            .expect("expected vertical wheel operation");
+
+        assert_eq!(horizontal, -3);
+        assert_eq!(vertical, -120);
     }
 
     #[tokio::test]

@@ -24,7 +24,11 @@ import {
   shouldUsePhysicalRdpKey,
 } from "@/lib/rdpIme";
 import { buildRdpKeyEvent, type RdpInputEvent } from "@/lib/rdpInput";
-import { decideFitWindowResize, keepDesktopSizeIfUnchanged } from "@/lib/rdpResize";
+import {
+  decideFitWindowResize,
+  keepDesktopSizeIfUnchanged,
+  shouldDisableDynamicResizeAfterState,
+} from "@/lib/rdpResize";
 import { mapClientPointToRdpPixel } from "@/lib/rdpViewport";
 import type { RdpSessionPane } from "@/types/global";
 
@@ -76,8 +80,13 @@ interface RdpPaneHostProps {
 }
 
 function getCanvasPoint(canvas: HTMLCanvasElement, event: PointerEvent | WheelEvent) {
-  const rect = canvas.getBoundingClientRect();
-  return mapClientPointToRdpPixel(rect, canvas.width, canvas.height, event.clientX, event.clientY);
+  return mapClientPointToRdpPixel(
+    getCanvasContentRect(canvas),
+    canvas.width,
+    canvas.height,
+    event.clientX,
+    event.clientY,
+  );
 }
 
 function buttonName(button: number): Extract<RdpInputEvent, { type: "mouse-button" }>["button"] {
@@ -93,6 +102,23 @@ function ensureCanvasSize(canvas: HTMLCanvasElement, width: number, height: numb
   canvas.width = width;
   canvas.height = height;
   return true;
+}
+
+function getCanvasContentRect(canvas: HTMLCanvasElement) {
+  const rect = canvas.getBoundingClientRect();
+  const desktopWidth = canvas.width;
+  const desktopHeight = canvas.height;
+  if (rect.width <= 0 || rect.height <= 0 || desktopWidth <= 0 || desktopHeight <= 0) return rect;
+
+  const scale = Math.min(rect.width / desktopWidth, rect.height / desktopHeight);
+  const width = desktopWidth * scale;
+  const height = desktopHeight * scale;
+  return {
+    left: rect.left + (rect.width - width) / 2,
+    top: rect.top + (rect.height - height) / 2,
+    width,
+    height,
+  };
 }
 
 function copyPatchToRgba(patch: RdpFramePatch, target: Uint8ClampedArray | Uint8Array) {
@@ -363,13 +389,15 @@ function RdpPaneHost({
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
   const remoteCursorBitmapRef = useRef<RemoteCursorBitmap | null>(null);
   const lastResizeRef = useRef<{ width: number; height: number } | null>(null);
-  const didPrimeResizeRef = useRef(false);
+  const lastResizeSentAtRef = useRef<number | null>(null);
+  const dynamicResizeDisabledRef = useRef(false);
   const [state, setState] = useState<RdpSessionState>(pane.connectError ? "failed" : "connecting");
   const [message, setMessage] = useState<string | null>(pane.connectError ?? null);
   const [desktopSize, setDesktopSize] = useState({
     width: pane.display?.remoteWidth ?? 1920,
     height: pane.display?.remoteHeight ?? 1080,
   });
+  const desktopSizeRef = useRef(desktopSize);
 
   const sendInputBatch = useCallback(
     async (events: RdpInputEvent[]) => {
@@ -424,8 +452,9 @@ function RdpPaneHost({
   );
 
   useEffect(() => {
-    didPrimeResizeRef.current = false;
     lastResizeRef.current = null;
+    lastResizeSentAtRef.current = null;
+    dynamicResizeDisabledRef.current = false;
 
     const channel = new Channel<ArrayBuffer>((frame) => {
       const patch = decodeRdpFramePatch(frame);
@@ -450,6 +479,10 @@ function RdpPaneHost({
   }, [pane.connectError, pane.connecting, pane.sessionId]);
 
   useEffect(() => {
+    desktopSizeRef.current = desktopSize;
+  }, [desktopSize]);
+
+  useEffect(() => {
     return () => {
       rendererRef.current?.dispose();
       rendererRef.current = null;
@@ -460,6 +493,15 @@ function RdpPaneHost({
     const unlisten = listen<RdpStatePayload>(`rdp-state-${pane.sessionId}`, (event) => {
       setState(event.payload.state);
       setMessage(event.payload.message ?? null);
+      if (
+        shouldDisableDynamicResizeAfterState({
+          state: event.payload.state,
+          lastResizeAt: lastResizeSentAtRef.current,
+          now: Date.now(),
+        })
+      ) {
+        dynamicResizeDisabledRef.current = true;
+      }
       if (event.payload.state === "failed") {
         onConnectionError?.(pane.sessionId, event.payload.message ?? "RDP connection failed");
       }
@@ -477,7 +519,7 @@ function RdpPaneHost({
     const position = pendingCursorRef.current;
     const bitmap = remoteCursorBitmapRef.current;
     if (!cursor || !canvas || !container || !position || !bitmap) return;
-    const rect = canvas.getBoundingClientRect();
+    const rect = getCanvasContentRect(canvas);
     const containerRect = container.getBoundingClientRect();
     const scaleX = rect.width / Math.max(1, canvas.width);
     const scaleY = rect.height / Math.max(1, canvas.height);
@@ -553,28 +595,39 @@ function RdpPaneHost({
     let timer: number | null = null;
     const syncResize = () => {
       if (timer !== null) window.clearTimeout(timer);
+      const delay = lastResizeRef.current ? 200 : 600;
       timer = window.setTimeout(() => {
         const rect = container.getBoundingClientRect();
+        const visibleForResize =
+          active && visible && state === "active" && rect.width > 0 && rect.height > 0;
+        const remoteSize = desktopSizeRef.current;
         const decision = decideFitWindowResize({
           mode: "fit-window",
-          visible: active && visible && state === "active" && rect.width > 0 && rect.height > 0,
+          visible: visibleForResize,
           containerWidth: rect.width,
           containerHeight: rect.height,
+          remoteWidth: remoteSize.width,
+          remoteHeight: remoteSize.height,
           lastWidth: lastResizeRef.current?.width,
           lastHeight: lastResizeRef.current?.height,
+          allowInitialResize: true,
+          disabled: dynamicResizeDisabledRef.current,
+          minDelta: 32,
         });
-        if (!decision.shouldResize) return;
-        lastResizeRef.current = { width: decision.width, height: decision.height };
-        if (!didPrimeResizeRef.current) {
-          didPrimeResizeRef.current = true;
+        if (!decision.shouldResize) {
+          if (visibleForResize && decision.width > 0 && decision.height > 0) {
+            lastResizeRef.current ??= { width: decision.width, height: decision.height };
+          }
           return;
         }
+        lastResizeRef.current = { width: decision.width, height: decision.height };
+        lastResizeSentAtRef.current = Date.now();
         void invoke("rdp_resize", {
           sessionId: pane.sessionId,
           width: decision.width,
           height: decision.height,
         }).catch(() => {});
-      }, 200);
+      }, delay);
     };
 
     const observer = new ResizeObserver(syncResize);
@@ -695,11 +748,11 @@ function RdpPaneHost({
 
   const scaleStyle = useMemo(
     () => ({
-      aspectRatio: `${desktopSize.width} / ${desktopSize.height}`,
-      maxWidth: "100%",
-      maxHeight: "100%",
+      width: "100%",
+      height: "100%",
+      objectFit: "contain" as const,
     }),
-    [desktopSize.height, desktopSize.width],
+    [],
   );
 
   const sendShortcut = (events: RdpInputEvent[]) => {
