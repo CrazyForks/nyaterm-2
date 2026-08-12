@@ -1394,7 +1394,8 @@
   },
   "quickCommands": {
     "add": "新增",
-    "addCommand": "新增快捷命令",
+    "addCategory": "新增分類",
+    "addCommand": "新增命令",
     "allCategories": "所有分類",
     "appendHint": "點選後命令只會被放置在終端的輸入行上供您檢查，不會立即執行。",
     "appendOnly": "追加到輸入行",
@@ -1463,6 +1464,7 @@
     "sendToAll": "傳送到所有工作階段",
     "sort": "排序",
     "sortByCreated": "按建立時間",
+    "sortByCustom": "自訂排序",
     "sortByName": "按名稱",
     "sortByUseCount": "按使用頻次",
     "tileMode": "堆疊模式",

@@ -1394,7 +1394,8 @@
   },
   "quickCommands": {
     "add": "添加",
-    "addCommand": "添加快捷命令",
+    "addCategory": "添加分类",
+    "addCommand": "添加命令",
     "allCategories": "所有分类",
     "appendHint": "点击后命令只会被放置在终端的输入行上供您检查，不会立即执行。",
     "appendOnly": "追加到输入行",
@@ -1463,6 +1464,7 @@
     "sendToAll": "发送到所有会话",
     "sort": "排序",
     "sortByCreated": "按创建时间",
+    "sortByCustom": "自定义排序",
     "sortByName": "按名称",
     "sortByUseCount": "按使用频次",
     "tileMode": "堆叠模式",

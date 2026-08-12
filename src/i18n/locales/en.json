@@ -1395,6 +1395,7 @@
   },
   "quickCommands": {
     "add": "Add",
+    "addCategory": "Add Category",
     "addCommand": "Add Command",
     "allCategories": "All",
     "appendHint": "Place command at the prompt for review.",
@@ -1464,6 +1465,7 @@
     "sendToAll": "Send to All",
     "sort": "Sort",
     "sortByCreated": "Created",
+    "sortByCustom": "Custom order",
     "sortByName": "By name",
     "sortByUseCount": "Usage",
     "tileMode": "Stacked mode",

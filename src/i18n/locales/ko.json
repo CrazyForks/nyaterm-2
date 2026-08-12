@@ -1394,6 +1394,7 @@
   },
   "quickCommands": {
     "add": "추가",
+    "addCategory": "카테고리 추가",
     "addCommand": "명령 추가",
     "allCategories": "전체",
     "appendHint": "검토를 위해 명령을 프롬프트에 배치합니다.",
@@ -1463,6 +1464,7 @@
     "sendToAll": "모두에게 전송",
     "sort": "정렬",
     "sortByCreated": "생성일순",
+    "sortByCustom": "사용자 지정 순서",
     "sortByName": "이름순",
     "sortByUseCount": "사용 빈도순",
     "tileMode": "쌓기 모드",
