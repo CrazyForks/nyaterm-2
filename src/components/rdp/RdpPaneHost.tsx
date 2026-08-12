@@ -703,6 +703,7 @@ function RdpPaneHost({
 
   const handleKeyUp = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (event.defaultPrevented) return;
       if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
       const inputEvent = buildRdpKeyEvent(event.nativeEvent, "key-up");
       if (!inputEvent) return;
@@ -716,6 +717,7 @@ function RdpPaneHost({
 
   const handleRdpKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (event.defaultPrevented) return;
       if (shouldUsePhysicalRdpKey(event.nativeEvent)) {
         handleKeyDown(event);
         return;
@@ -725,6 +727,22 @@ function RdpPaneHost({
       }
     },
     [handleKeyDown, schedulePrintableKeyFallback],
+  );
+
+  const handlePhysicalKeyDownCapture = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
+      handleKeyDown(event);
+    },
+    [handleKeyDown],
+  );
+
+  const handlePhysicalKeyUpCapture = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (!shouldUsePhysicalRdpKey(event.nativeEvent)) return;
+      handleKeyUp(event);
+    },
+    [handleKeyUp],
   );
 
   const flushMouseMove = useCallback(() => {
@@ -766,6 +784,8 @@ function RdpPaneHost({
       data-rdp-input-root="true"
       tabIndex={active ? 0 : -1}
       onFocus={handleFocus}
+      onKeyDownCapture={handlePhysicalKeyDownCapture}
+      onKeyUpCapture={handlePhysicalKeyUpCapture}
       onKeyDown={handleRdpKeyDown}
       onKeyUp={handleKeyUp}
       onBlur={handleBlur}
