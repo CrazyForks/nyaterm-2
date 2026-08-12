@@ -1360,7 +1360,6 @@
     "title": "Passwords"
   },
   "processManager": {
-    "applyNice": "Apply nice",
     "commandCopied": "Command copied",
     "confirmSignalDesc": "Send {{signal}} to PID {{pid}}?\n{{command}}",
     "confirmSignalTitle": "Signal process?",
@@ -1371,14 +1370,11 @@
     "elapsed": "Elapsed",
     "error": "Failed to fetch processes",
     "errorWithDetail": "Failed to fetch processes: {{error}}",
-    "invalidNice": "Nice value must be an integer from -20 to 19.",
     "kill": "KILL",
-    "niceValue": "Nice value",
     "noMatches": "No matching processes",
     "noSession": "Connect via SSH to manage processes",
     "pidCopied": "PID {{pid}} copied",
     "process": "Process",
-    "reniceSuccess": "Updated nice value for PID {{pid}}",
     "search": "Search processes...",
     "signalCont": "Resume (CONT)",
     "signalHup": "Hang up (HUP)",

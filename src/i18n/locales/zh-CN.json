@@ -1359,7 +1359,6 @@
     "title": "密码"
   },
   "processManager": {
-    "applyNice": "应用 nice",
     "commandCopied": "命令已复制",
     "confirmSignalDesc": "向 PID {{pid}} 发送 {{signal}}？\n{{command}}",
     "confirmSignalTitle": "确认发送信号？",
@@ -1370,14 +1369,11 @@
     "elapsed": "运行时间",
     "error": "获取进程列表失败",
     "errorWithDetail": "获取进程列表失败：{{error}}",
-    "invalidNice": "nice 值必须是 -20 到 19 之间的整数。",
     "kill": "强杀",
-    "niceValue": "nice 值",
     "noMatches": "没有匹配的进程",
     "noSession": "连接 SSH 会话以管理进程",
     "pidCopied": "已复制 PID {{pid}}",
     "process": "进程",
-    "reniceSuccess": "已更新 PID {{pid}} 的 nice 值",
     "search": "搜索进程...",
     "signalCont": "继续 (CONT)",
     "signalHup": "挂断 (HUP)",

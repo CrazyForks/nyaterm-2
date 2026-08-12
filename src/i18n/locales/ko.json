@@ -1359,7 +1359,6 @@
     "title": "비밀번호"
   },
   "processManager": {
-    "applyNice": "nice 값 적용",
     "commandCopied": "명령이 복사되었습니다",
     "confirmSignalDesc": "PID {{pid}}에 {{signal}}을(를) 보낼까요?\n{{command}}",
     "confirmSignalTitle": "프로세스에 시그널을 보낼까요?",
@@ -1370,14 +1369,11 @@
     "elapsed": "경과 시간",
     "error": "프로세스를 가져오지 못했습니다",
     "errorWithDetail": "프로세스를 가져오지 못했습니다: {{error}}",
-    "invalidNice": "nice 값은 -20에서 19 사이의 정수여야 합니다.",
     "kill": "KILL",
-    "niceValue": "nice 값",
     "noMatches": "일치하는 프로세스가 없습니다",
     "noSession": "SSH로 연결하여 프로세스를 관리하세요",
     "pidCopied": "PID {{pid}}가 복사되었습니다",
     "process": "프로세스",
-    "reniceSuccess": "PID {{pid}}의 nice 값을 업데이트했습니다",
     "search": "프로세스 검색...",
     "signalCont": "재개(CONT)",
     "signalHup": "행업(HUP)",
