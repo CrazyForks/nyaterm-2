@@ -248,6 +248,7 @@ function isSessionNotFoundError(error: unknown): boolean {
  */
 export default function XTerminal({
   sessionId,
+  sessionName,
   active,
   visible = true,
   sessionType,
@@ -257,6 +258,9 @@ export default function XTerminal({
   onConnectionError,
   syncPeerSessionIds,
   syncOverlay,
+  recordingStatus,
+  onToggleRecording,
+  onSaveTranscript,
 }: XTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -1795,6 +1799,7 @@ export default function XTerminal({
         "view.showAllCommands",
         "terminal.manageSyncGroups",
         "terminal.showCommandSuggestions",
+        "terminal.recording.toggle",
         "special.lockScreen",
       ];
       for (const sid of swallowIds) {
@@ -3519,11 +3524,16 @@ export default function XTerminal({
         style={{ backgroundColor: terminalBackground }}
       >
         <TerminalContextMenu
+          sessionId={sessionId}
+          sessionName={sessionName}
           terminalRef={terminalRef}
           onFind={doFind}
           onPasteText={handlePasteText}
           onPasteClipboard={pasteClipboard}
           onClearAll={handleClearAll}
+          recordingStatus={recordingStatus}
+          onToggleRecording={onToggleRecording}
+          onSaveTranscript={onSaveTranscript}
         >
           <div
             className={`nyaterm-wallpaper-transparent-surface h-full w-full ${

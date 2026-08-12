@@ -3161,36 +3161,6 @@ function App() {
     [connectTemporaryConnection],
   );
 
-  useGlobalShortcuts(
-    {
-      onNewSession: () => handleNewSession(),
-      onTemporarySshLink: handleOpenTemporarySshLink,
-      onOpenSessionSwitcher: handleOpenSessionSwitcher,
-      onNewLocalTerminal: handleNewLocalTerminal,
-      onCloseTab: handleCloseActiveTab,
-      onDuplicateSession: handleDuplicateActiveSession,
-      onMultiplexSsh: handleMultiplexActiveSshSession,
-      onDuplicateSessionWithCommand: handleDuplicateActiveSessionWithCommand,
-      onMultiplexSshWithCommand: handleMultiplexActiveSshSessionWithCommand,
-      onNextTab: handleNextTab,
-      onPrevTab: handlePrevTab,
-      onSwitchTab: handleSwitchTab,
-      onToggleLeftSidebar: handleToggleLeftSidebar,
-      onToggleRightSidebar: handleToggleRightSidebar,
-      onZoomIn: handleZoomIn,
-      onZoomOut: handleZoomOut,
-      onResetZoom: handleResetZoom,
-      onOpenSettings: handleOpenSettings,
-      onOpenChat: handleOpenChat,
-      onShowAllCommands: handleShowAllCommands,
-      onLockScreen: handleLockScreen,
-      onManageSyncGroups: () => setShowSyncGroupDialog(true),
-      onClearTerminal: () =>
-        window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
-    },
-    appSettings.keybindings,
-  );
-
   const buildRecordingFilePath = useCallback(
     async (prefix: "recording" | "session", sessionName: string) => {
       const dir = appSettings.recording.base_path || (await downloadDir());
@@ -3206,9 +3176,8 @@ function App() {
     [appSettings.recording.base_path],
   );
 
-  const handleToggleSessionRecording = useCallback(
-    async (session: SessionInfo, mode: RecordingMode = "transcript") => {
-      const sessionId = session.id;
+  const handleToggleSessionRecordingById = useCallback(
+    async (sessionId: string, mode: RecordingMode = "transcript") => {
       const isActive = recordingSessions.has(sessionId);
 
       if (isActive) {
@@ -3255,6 +3224,51 @@ function App() {
     [refreshRecordingStatuses, recordingSessions, t],
   );
 
+  const handleToggleSessionRecording = useCallback(
+    async (session: SessionInfo, mode: RecordingMode = "transcript") => {
+      await handleToggleSessionRecordingById(session.id, mode);
+    },
+    [handleToggleSessionRecordingById],
+  );
+
+  const handleToggleActiveSessionRecording = useCallback(() => {
+    if (isLocked || !activePane || activePane.connecting || activePane.connectError) {
+      return;
+    }
+    void handleToggleSessionRecordingById(activePane.sessionId, "transcript");
+  }, [activePane, handleToggleSessionRecordingById, isLocked]);
+
+  useGlobalShortcuts(
+    {
+      onNewSession: () => handleNewSession(),
+      onTemporarySshLink: handleOpenTemporarySshLink,
+      onOpenSessionSwitcher: handleOpenSessionSwitcher,
+      onNewLocalTerminal: handleNewLocalTerminal,
+      onCloseTab: handleCloseActiveTab,
+      onDuplicateSession: handleDuplicateActiveSession,
+      onMultiplexSsh: handleMultiplexActiveSshSession,
+      onDuplicateSessionWithCommand: handleDuplicateActiveSessionWithCommand,
+      onMultiplexSshWithCommand: handleMultiplexActiveSshSessionWithCommand,
+      onNextTab: handleNextTab,
+      onPrevTab: handlePrevTab,
+      onSwitchTab: handleSwitchTab,
+      onToggleLeftSidebar: handleToggleLeftSidebar,
+      onToggleRightSidebar: handleToggleRightSidebar,
+      onZoomIn: handleZoomIn,
+      onZoomOut: handleZoomOut,
+      onResetZoom: handleResetZoom,
+      onOpenSettings: handleOpenSettings,
+      onOpenChat: handleOpenChat,
+      onShowAllCommands: handleShowAllCommands,
+      onLockScreen: handleLockScreen,
+      onManageSyncGroups: () => setShowSyncGroupDialog(true),
+      onClearTerminal: () =>
+        window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
+      onToggleRecording: handleToggleActiveSessionRecording,
+    },
+    appSettings.keybindings,
+  );
+
   const handleSaveSessionTranscript = useCallback(
     async (session: SessionInfo) => {
       try {
@@ -3283,6 +3297,26 @@ function App() {
       buildRecordingFilePath,
       t,
     ],
+  );
+
+  const handleSaveSessionTranscriptById = useCallback(
+    async (sessionId: string, sessionName?: string) => {
+      const session = liveSessionsById?.get(sessionId);
+      await handleSaveSessionTranscript({
+        id: sessionId,
+        name: session?.name ?? sessionName ?? sessionId,
+        session_type: session?.session_type ?? "Local",
+        connection_id: session?.connection_id ?? null,
+        connected: session?.connected ?? true,
+        owner_window_label: session?.owner_window_label ?? null,
+        ai_execution_profile: session?.ai_execution_profile ?? "auto",
+        injection_active: session?.injection_active ?? false,
+        remote_file_browser_enabled: session?.remote_file_browser_enabled ?? false,
+        remote_stats_enabled: session?.remote_stats_enabled ?? false,
+        ssh_profile: session?.ssh_profile ?? null,
+      });
+    },
+    [handleSaveSessionTranscript, liveSessionsById],
   );
 
   // Resize handlers
@@ -3903,6 +3937,9 @@ function App() {
           onReconnected: handleReconnected,
           onDisconnectedCloseRequested: handleCloseDisconnectedPane,
           onConnectionError: handleConnectionError,
+          recordingStatuses,
+          onToggleSessionRecording: handleToggleSessionRecordingById,
+          onSaveSessionTranscript: handleSaveSessionTranscriptById,
         }}
         tabsCount={tabs.length}
         emptyWorkspace={{

@@ -51,6 +51,7 @@ export interface ShortcutCallbacks {
   onLockScreen: () => void;
   onManageSyncGroups: () => void;
   onClearTerminal: () => void;
+  onToggleRecording: () => void;
 }
 
 export function useGlobalShortcuts(
@@ -97,6 +98,7 @@ export function useGlobalShortcuts(
 
   useHotkeys(k("terminal.manageSyncGroups"), cb.onManageSyncGroups, HOTKEY_OPTIONS);
   useHotkeys(k("terminal.clear"), cb.onClearTerminal, HOTKEY_OPTIONS);
+  useHotkeys(k("terminal.recording.toggle"), cb.onToggleRecording, HOTKEY_OPTIONS);
 
   useHotkeys(k("special.lockScreen"), cb.onLockScreen, HOTKEY_OPTIONS);
 }

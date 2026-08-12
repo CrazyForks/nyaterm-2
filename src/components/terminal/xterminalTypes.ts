@@ -1,4 +1,4 @@
-import type { SessionType } from "@/types/global";
+import type { RecordingMode, RecordingStatus, SessionType } from "@/types/global";
 
 export interface SyncOverlayState {
   peerCount: number;
@@ -12,6 +12,7 @@ export interface SyncOverlayState {
 
 export interface XTerminalProps {
   sessionId: string;
+  sessionName?: string;
   active: boolean;
   visible?: boolean;
   sessionType: SessionType;
@@ -21,6 +22,9 @@ export interface XTerminalProps {
   onConnectionError?: (sessionId: string, error: string) => void;
   syncPeerSessionIds?: string[];
   syncOverlay?: SyncOverlayState;
+  recordingStatus?: RecordingStatus;
+  onToggleRecording?: (sessionId: string, mode?: RecordingMode) => Promise<void> | void;
+  onSaveTranscript?: (sessionId: string, sessionName?: string) => Promise<void> | void;
 }
 
 export interface MultiLinePasteDialogProps {
