@@ -218,7 +218,7 @@ export default function TerminalContextMenu({
   );
 
   const openRecordingSettings = useCallback(() => {
-    void openSettings("terminal")
+    void openSettings("terminal-general")
       .catch(() => {})
       .finally(() => terminalRef.current?.focus());
   }, [terminalRef]);
