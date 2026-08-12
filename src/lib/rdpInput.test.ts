@@ -40,4 +40,15 @@ describe("rdpInput", () => {
     expect(mapKeyboardCodeToRdp("Delete")).toEqual({ scanCode: 0x53, extended: true });
     expect(mapKeyboardCodeToRdp("ArrowLeft")).toEqual({ scanCode: 0x4b, extended: true });
   });
+
+  it("sends caps lock as a physical key event", () => {
+    const event = new KeyboardEvent("keydown", { code: "CapsLock", key: "CapsLock" });
+
+    expect(buildRdpKeyEvent(event, "key-down")).toEqual({
+      type: "key-down",
+      scanCode: 0x3a,
+      extended: false,
+      repeat: false,
+    });
+  });
 });
