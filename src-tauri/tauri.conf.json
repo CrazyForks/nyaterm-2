@@ -43,7 +43,11 @@
     ],
     "windows": {
       "nsis": {
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser"
+      },
+      "wix": {
+        "upgradeCode": "f4b0dcc1-48c8-53c7-a0cf-7f36c5f1b27f"
       }
     }
   },
