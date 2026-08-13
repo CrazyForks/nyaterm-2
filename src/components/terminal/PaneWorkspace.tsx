@@ -2,9 +2,10 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdErrorOutline } from "react-icons/md";
 import ResizeHandle from "@/components/layout/ResizeHandle";
-import { Button } from "@/components/ui/button";
-import { useApp } from "@/context/AppContext";
 import RdpPaneHost from "@/components/rdp/RdpPaneHost";
+import { Button } from "@/components/ui/button";
+import VncPaneHost from "@/components/vnc/VncPaneHost";
+import { useApp } from "@/context/AppContext";
 import {
   getActiveGroupForSession,
   getSessionInputPeerIds,
@@ -292,16 +293,32 @@ function PaneNodeView({
             </Button>
           ) : null}
         </div>
-      ) : node.paneKind === "rdp" ? (
-        <RdpPaneHost
-          pane={node}
-          active={isActive}
-          visible={visible}
-          onDisconnectedCloseRequested={() => void onDisconnectedCloseRequested?.(tab.id, node.id)}
-          onConnectionError={(sessionId, error) =>
-            onConnectionError?.(tab.id, node.id, sessionId, error)
-          }
-        />
+      ) : node.paneKind === "remote-desktop" ? (
+        node.type === "RDP" ? (
+          <RdpPaneHost
+            pane={node}
+            active={isActive}
+            visible={visible}
+            onDisconnectedCloseRequested={() =>
+              void onDisconnectedCloseRequested?.(tab.id, node.id)
+            }
+            onConnectionError={(sessionId, error) =>
+              onConnectionError?.(tab.id, node.id, sessionId, error)
+            }
+          />
+        ) : (
+          <VncPaneHost
+            pane={node}
+            active={isActive}
+            visible={visible}
+            onDisconnectedCloseRequested={() =>
+              void onDisconnectedCloseRequested?.(tab.id, node.id)
+            }
+            onConnectionError={(sessionId, error) =>
+              onConnectionError?.(tab.id, node.id, sessionId, error)
+            }
+          />
+        )
       ) : (
         <PaneXTerminal
           sessionId={node.sessionId}

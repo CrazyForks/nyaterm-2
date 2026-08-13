@@ -17,12 +17,14 @@ mod quick_commands;
 pub mod rdp;
 pub(crate) mod rdp_keyboard_capture;
 mod recording;
+pub mod remote_desktop;
 pub mod remote_exec;
 mod session;
 pub mod sftp;
 pub mod ssh;
 pub(crate) mod terminal_session;
 pub mod translate;
+pub mod vnc;
 pub mod watcher;
 pub mod zmodem;
 
@@ -48,3 +50,4 @@ pub use terminal_session::telnet::{
     TelnetAutoLoginConfig, TelnetEnterMode, TelnetSessionConfig, TelnetStartupCommand,
     create_telnet_session,
 };
+pub use vnc::VncSessionManager;

@@ -363,7 +363,9 @@ pub fn strip_device_local_sessions(sessions: &mut config::SessionsConfig) {
                 *agent_endpoint = config::SshAgentEndpoint::Auto;
                 *agent_forwarding = false;
             }
-            config::ConnectionType::Telnet { .. } | config::ConnectionType::Rdp { .. } => {}
+            config::ConnectionType::Telnet { .. }
+            | config::ConnectionType::Rdp { .. }
+            | config::ConnectionType::Vnc { .. } => {}
         }
     }
 }
