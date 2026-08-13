@@ -48,7 +48,7 @@ import type {
   AppSettings,
   Group,
   PaneSplitDirection,
-  RdpSessionPane,
+  RemoteDesktopSessionPane,
   SavedConnection,
   SessionPane,
   SyncGroup,
@@ -62,7 +62,7 @@ import { DEFAULT_TERMINAL_FONT_SIZE } from "../lib/terminalFontSize";
 import { isPrimaryMainWindow } from "../lib/windowManager";
 
 type PaneConnectingUpdates = Partial<Pick<SessionPane, "name" | "type" | "connectionId">> & {
-  display?: RdpSessionPane["display"];
+  display?: RemoteDesktopSessionPane["display"];
 };
 
 interface AppContextType {
@@ -1228,6 +1228,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 .then((sessionId) => handleRestoredSessionCreated(tab.id, pane.id, sessionId))
                 .catch((e) =>
                   handleRestoredSessionFailed(tab.id, pane.id, "Serial", pane.connectionId, e),
+                );
+              break;
+            case "VNC":
+              if (!cid) {
+                markPaneConnectionFailed(tab.id, pane.id, "Missing VNC connection id");
+                return;
+              }
+              invoke<string>("create_vnc_session", {
+                connectionId: cid,
+                createRequestId: pane.createRequestId,
+              })
+                .then((sessionId) => handleRestoredSessionCreated(tab.id, pane.id, sessionId, cid))
+                .catch((e) =>
+                  handleRestoredSessionFailed(tab.id, pane.id, "VNC", pane.connectionId, e),
                 );
               break;
             case "RDP":

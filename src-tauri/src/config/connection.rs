@@ -295,6 +295,23 @@ pub enum ConnectionType {
         #[serde(default)]
         reconnect: RdpReconnectSettings,
     },
+    Vnc {
+        host: String,
+        #[serde(default = "default_vnc_port")]
+        port: u16,
+        #[serde(default)]
+        security: VncSecuritySettings,
+        #[serde(default)]
+        display: VncDisplaySettings,
+        #[serde(default)]
+        clipboard: VncClipboardSettings,
+        #[serde(default)]
+        reconnect: VncReconnectSettings,
+        #[serde(default = "default_true")]
+        shared: bool,
+        #[serde(default)]
+        view_only: bool,
+    },
 }
 
 fn default_ssh_port() -> u16 {
@@ -311,6 +328,9 @@ fn default_telnet_port() -> u16 {
 }
 fn default_rdp_port() -> u16 {
     3389
+}
+fn default_vnc_port() -> u16 {
+    5900
 }
 fn default_baud_rate() -> u32 {
     115_200
@@ -430,6 +450,73 @@ fn default_rdp_clipboard_mode() -> String {
     "text-only".to_string()
 }
 fn default_rdp_reconnect_attempts() -> u32 {
+    5
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VncSecuritySettings {
+    #[serde(default = "default_vnc_security_mode")]
+    pub mode: String,
+}
+
+impl Default for VncSecuritySettings {
+    fn default() -> Self {
+        Self {
+            mode: default_vnc_security_mode(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VncDisplaySettings {
+    #[serde(default = "default_vnc_scale_mode")]
+    pub scale_mode: String,
+}
+
+impl Default for VncDisplaySettings {
+    fn default() -> Self {
+        Self {
+            scale_mode: default_vnc_scale_mode(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VncClipboardSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for VncClipboardSettings {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VncReconnectSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_vnc_reconnect_attempts")]
+    pub max_attempts: u32,
+}
+
+impl Default for VncReconnectSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_attempts: default_vnc_reconnect_attempts(),
+        }
+    }
+}
+
+fn default_vnc_security_mode() -> String {
+    "auto".to_string()
+}
+fn default_vnc_scale_mode() -> String {
+    "fit".to_string()
+}
+fn default_vnc_reconnect_attempts() -> u32 {
     5
 }
 
@@ -764,7 +851,9 @@ pub fn save_sessions(app: &AppHandle, config: &SessionsConfig) -> AppResult<()> 
             } => {
                 *ai_execution_profile = AiExecutionProfile::Auto;
             }
-            ConnectionType::Ssh { .. } | ConnectionType::Rdp { .. } => {}
+            ConnectionType::Ssh { .. }
+            | ConnectionType::Rdp { .. }
+            | ConnectionType::Vnc { .. } => {}
         }
         if let Some(auth) = &mut conn.auth {
             auth.has_password = false;
@@ -847,7 +936,7 @@ pub fn resolve_connection_encoding(app: &AppHandle, conn: &SavedConnection) -> S
         | ConnectionType::LocalTerminal { encoding, .. }
         | ConnectionType::Telnet { encoding, .. }
         | ConnectionType::Serial { encoding, .. } => encoding.as_str(),
-        ConnectionType::Rdp { .. } => "",
+        ConnectionType::Rdp { .. } | ConnectionType::Vnc { .. } => "",
     };
     if !per_conn.is_empty() {
         return per_conn.to_string();
@@ -1407,6 +1496,40 @@ mod tests {
         assert_eq!(clipboard.mode, "text-only");
         assert!(reconnect.enabled);
         assert_eq!(reconnect.max_attempts, 5);
+    }
+
+    #[test]
+    fn vnc_connection_defaults_to_standard_mvp_options() {
+        let connection: SavedConnection = serde_json::from_value(serde_json::json!({
+            "id": "vnc-1",
+            "name": "Linux desktop",
+            "type": "vnc",
+            "host": "192.168.1.30"
+        }))
+        .expect("connection");
+
+        let ConnectionType::Vnc {
+            port,
+            security,
+            display,
+            clipboard,
+            reconnect,
+            shared,
+            view_only,
+            ..
+        } = connection.config
+        else {
+            panic!("expected vnc connection");
+        };
+
+        assert_eq!(port, 5900);
+        assert_eq!(security.mode, "auto");
+        assert_eq!(display.scale_mode, "fit");
+        assert!(clipboard.enabled);
+        assert!(reconnect.enabled);
+        assert_eq!(reconnect.max_attempts, 5);
+        assert!(shared);
+        assert!(!view_only);
     }
 
     #[test]

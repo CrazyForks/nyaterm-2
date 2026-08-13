@@ -176,6 +176,7 @@ opendal = { version = "0.58", default-features = false, features = [
 ] }
 redb = "4.1.0"
 zmodem2 = { path = "vendor/zmodem2" }
+vnc-rs = { path = "vendor/vnc-rs" }
 
 [patch.crates-io]
 ironrdp-connector = { path = "vendor/ironrdp-connector" }

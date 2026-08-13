@@ -1,7 +1,8 @@
 /** Type of terminal session. */
 export type SessionType = "SSH" | "Local" | "Telnet" | "Serial";
-export type WorkspaceSessionType = SessionType | "RDP";
-export type WorkspacePaneKind = "terminal" | "rdp";
+export type WorkspaceSessionType = SessionType | "RDP" | "VNC";
+export type WorkspacePaneKind = "terminal" | "remote-desktop";
+export type PersistedWorkspacePaneKind = WorkspacePaneKind | "rdp";
 
 export interface AppRuntimeInfo {
   portable: boolean;
@@ -40,7 +41,7 @@ export interface SyncGroup {
 export type PaneSplitDirection = "horizontal" | "vertical";
 
 /** Connection type discriminator matching Rust ConnectionType. */
-export type ConnectionTypeTag = "ssh" | "local_terminal" | "telnet" | "serial" | "rdp";
+export type ConnectionTypeTag = "ssh" | "local_terminal" | "telnet" | "serial" | "rdp" | "vnc";
 
 /** Metadata for a connected or disconnected session. */
 export interface SessionInfo {
@@ -84,18 +85,32 @@ export interface TerminalSessionPane extends WorkspacePaneBase {
   type: SessionType;
 }
 
-/** Leaf node representing one graphical RDP session inside a workspace tab. */
-export interface RdpSessionPane extends WorkspacePaneBase {
-  paneKind: "rdp";
-  type: "RDP";
-  display?: {
-    remoteWidth: number;
-    remoteHeight: number;
-    scaleMode: "fit" | "actual" | "stretch";
-  };
+export type RemoteDesktopScaleMode = "fit" | "actual" | "stretch";
+
+export interface RemoteDesktopDisplayMetadata {
+  remoteWidth?: number;
+  remoteHeight?: number;
+  scaleMode?: RemoteDesktopScaleMode;
+  viewOnly?: boolean;
 }
 
-export type SessionPane = TerminalSessionPane | RdpSessionPane;
+/** Leaf node representing one graphical remote desktop session inside a workspace tab. */
+export interface RemoteDesktopSessionPane extends WorkspacePaneBase {
+  paneKind: "remote-desktop";
+  type: "RDP" | "VNC";
+  display?: RemoteDesktopDisplayMetadata;
+}
+
+/** Leaf node representing one graphical RDP session inside a workspace tab. */
+export interface RdpSessionPane extends RemoteDesktopSessionPane {
+  type: "RDP";
+}
+
+export interface VncSessionPane extends RemoteDesktopSessionPane {
+  type: "VNC";
+}
+
+export type SessionPane = TerminalSessionPane | RdpSessionPane | VncSessionPane;
 
 /** Split node containing two child panes. */
 export interface SplitPane {
@@ -418,14 +433,18 @@ export interface SavedConnection {
   encoding?: string;
   /** RDP-only: optional Windows/domain part for authentication. */
   domain?: string;
-  /** RDP-only security options. */
-  security?: RdpSecuritySettings;
-  /** RDP-only display options. */
-  display?: RdpDisplaySettings;
-  /** RDP-only clipboard options. */
-  clipboard?: RdpClipboardSettings;
-  /** RDP-only reconnect options. */
-  reconnect?: RdpReconnectSettings;
+  /** RDP/VNC security options. */
+  security?: Partial<RdpSecuritySettings & VncSecuritySettings>;
+  /** RDP/VNC display options. */
+  display?: Partial<RdpDisplaySettings & VncDisplaySettings>;
+  /** RDP/VNC clipboard options. */
+  clipboard?: Partial<RdpClipboardSettings & VncClipboardSettings>;
+  /** RDP/VNC reconnect options. */
+  reconnect?: Partial<RdpReconnectSettings & VncReconnectSettings>;
+  /** VNC-only shared-session flag. */
+  shared?: boolean;
+  /** VNC-only local input policy. */
+  view_only?: boolean;
 }
 
 export type RdpCertificatePolicy = "strict" | "prompt" | "accept-temporarily";
@@ -449,6 +468,23 @@ export interface RdpClipboardSettings {
 }
 
 export interface RdpReconnectSettings {
+  enabled: boolean;
+  max_attempts: number;
+}
+
+export interface VncSecuritySettings {
+  mode: "auto" | "vnc-auth" | "none";
+}
+
+export interface VncDisplaySettings {
+  scale_mode: RemoteDesktopScaleMode;
+}
+
+export interface VncClipboardSettings {
+  enabled: boolean;
+}
+
+export interface VncReconnectSettings {
   enabled: boolean;
   max_attempts: number;
 }
@@ -524,10 +560,11 @@ export interface OtpCodeResult {
 export interface RestorableSessionPane {
   id?: string;
   kind: "leaf";
-  pane_kind?: WorkspacePaneKind;
+  pane_kind?: PersistedWorkspacePaneKind;
   title: string;
   session_type: WorkspaceSessionType | "local";
   connection_id?: string;
+  display?: RemoteDesktopDisplayMetadata;
 }
 
 /** Saved split pane for startup restoration. */
